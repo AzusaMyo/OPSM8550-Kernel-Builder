@@ -125,8 +125,16 @@ SUSFS_MIN_VERSION=""
 if [[ "$KSU_TYPE" == *susfs* ]]; then
   SUSFS_MIN_VERSION="2.2.0"
   resolve_susfs_settings "$SOC" "$KERNEL_BRANCH"
-  SUSFS_COMMIT="$(git_ls_remote_retry --exit-code "$SUSFS_REPO" "refs/heads/${SUSFS_REF}" \
-    | awk 'NR == 1 {print $1}')"
+  case "$KSU_TYPE" in
+    SukiSU-Ultra-with-susfs-KPM|SukiSU-Ultra-with-susfs-nomount-KPM)
+      SUSFS_COMMIT="$(sukisu_compatible_susfs_commit "$SUSFS_REF")"
+      echo "::notice::Using SukiSU-compatible SUSFS v2.3.0 commit $SUSFS_COMMIT for $SUSFS_REF."
+      ;;
+    *)
+      SUSFS_COMMIT="$(git_ls_remote_retry --exit-code "$SUSFS_REPO" "refs/heads/${SUSFS_REF}" \
+        | awk 'NR == 1 {print $1}')"
+      ;;
+  esac
   if [[ ! "$SUSFS_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
     echo "::error::Could not resolve susfs branch '$SUSFS_REF' to a commit."
     exit 1

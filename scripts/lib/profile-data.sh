@@ -312,6 +312,25 @@ resolve_susfs_settings() {
   SUSFS_PATCH_FILE="50_add_susfs_in_${SUSFS_REF}.patch"
 }
 
+sukisu_compatible_susfs_commit() {
+  local susfs_ref="$1"
+
+  # SUSFS commits after these pins target the newer upstream KernelSU su-session
+  # fd ABI (ksu_install_su_fd), which SukiSU Ultra does not provide.  Keep each
+  # kernel branch on the identical v2.3.0 KernelSU patch that still matches
+  # SukiSU's hook implementation.
+  case "$susfs_ref" in
+    gki-android13-5.10) echo "ed3d6d9c9a2652e1c70f153f5358701e996d646c" ;;
+    gki-android13-5.15) echo "bca0d2333c1a7d717e7278b019d7af7ba1d16005" ;;
+    gki-android14-5.15) echo "d54b51724afa912c4c99bb99731354ce934d1889" ;;
+    gki-android14-6.1) echo "4fc9c1898ea66f51847cdbc0d1473ea4ef525a70" ;;
+    *)
+      echo "::error::No SukiSU-compatible SUSFS commit is pinned for $susfs_ref" >&2
+      return 1
+      ;;
+  esac
+}
+
 infer_android_versions() {
   local branch="$1"
 

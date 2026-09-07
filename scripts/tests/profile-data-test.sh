@@ -134,6 +134,8 @@ grep -Fq -- '- SukiSU Ultra + SUSFS + NoMount + KPM (experimental)' "$UPSTREAM_H
   || fail "upstream health is missing the combined SukiSU SUSFS/NoMount/KPM preset"
 grep -Fq 'SukiSU-Ultra-with-KPM|SukiSU-Ultra-with-susfs-KPM|SukiSU-Ultra-with-susfs-nomount-KPM)' "$RESOLVER_SCRIPT" \
   || fail "resolver does not route all SukiSU presets to SukiSU Ultra"
+grep -Fq 'SUSFS_COMMIT="$(sukisu_compatible_susfs_commit "$SUSFS_REF")"' "$RESOLVER_SCRIPT" \
+  || fail "resolver does not use the SukiSU-compatible SUSFS commit map"
 grep -Fq '"SukiSU-Ultra-with-KPM"|"SukiSU-Ultra-with-susfs-KPM"|"SukiSU-Ultra-with-susfs-nomount-KPM")' "$KSU_SETUP_SCRIPT" \
   || fail "KernelSU setup does not install SukiSU Ultra for all combined presets"
 grep -Fq 'resolve_known_sukisu_susfs_rejects' "$SUSFS_APPLY_SCRIPT" \
@@ -188,6 +190,17 @@ resolve_susfs_settings sm8550 lineage-23.2
 assert_eq "gki-android14-5.15" "$SUSFS_REF" "Android 16 susfs"
 resolve_susfs_settings sm7550 lineage-23.0
 assert_eq "gki-android14-5.15" "$SUSFS_REF" "Nord CE4 susfs"
+assert_eq "ed3d6d9c9a2652e1c70f153f5358701e996d646c" \
+  "$(sukisu_compatible_susfs_commit gki-android13-5.10)" "SukiSU Android 13 5.10 SUSFS pin"
+assert_eq "bca0d2333c1a7d717e7278b019d7af7ba1d16005" \
+  "$(sukisu_compatible_susfs_commit gki-android13-5.15)" "SukiSU Android 13 5.15 SUSFS pin"
+assert_eq "d54b51724afa912c4c99bb99731354ce934d1889" \
+  "$(sukisu_compatible_susfs_commit gki-android14-5.15)" "SukiSU Android 14 5.15 SUSFS pin"
+assert_eq "4fc9c1898ea66f51847cdbc0d1473ea4ef525a70" \
+  "$(sukisu_compatible_susfs_commit gki-android14-6.1)" "SukiSU Android 14 6.1 SUSFS pin"
+if sukisu_compatible_susfs_commit unsupported >/dev/null 2>&1; then
+  fail "unknown SukiSU SUSFS branches must not silently fall back to HEAD"
+fi
 version_is_at_least 2.2.0 2.2.0 || fail "SUSFS minimum version equality"
 version_is_at_least 2.3.0 2.2.0 || fail "SUSFS newer version acceptance"
 if version_is_at_least 2.1.9 2.2.0; then
