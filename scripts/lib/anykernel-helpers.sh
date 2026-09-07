@@ -3,6 +3,22 @@
 # Safe AnyKernel3 property editing helpers.
 #
 
+replace_file_preserving_mode() {
+  local replacement="$1"
+  local destination="$2"
+
+  # AnyKernel executes both anykernel.sh and update-binary.  mktemp creates
+  # replacements as 0600, so retain the upstream executable mode before the
+  # replacement.  A root-side extractor followed by an app-side repackager
+  # otherwise leaves the app unable to read these files.
+  chmod --reference="$destination" "$replacement" || {
+    rm -f "$replacement"
+    echo "::error::Could not preserve permissions for $destination"
+    return 1
+  }
+  mv "$replacement" "$destination"
+}
+
 set_ak_property() {
   local file="$1"
   local key="$2"
@@ -23,7 +39,7 @@ set_ak_property() {
     echo "::error::AnyKernel3 property '$key' was not found in $file"
     return 1
   }
-  mv "$tmp_file" "$file"
+  replace_file_preserving_mode "$tmp_file" "$file"
 }
 
 configure_anykernel_properties() {
@@ -84,6 +100,6 @@ add_anykernel_devicecheck_diagnostics() {
     echo "::error::Could not add AnyKernel device-check diagnostics to $file"
     return 1
   }
-  mv "$tmp_file" "$file"
+  replace_file_preserving_mode "$tmp_file" "$file"
   grep -Fq 'ro.product.device=$device' "$file"
 }

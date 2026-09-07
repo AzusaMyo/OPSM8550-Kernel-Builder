@@ -248,7 +248,9 @@ printf '%s\n' \
   'device.name4=' \
   'device.name5=' \
   'supported.versions=' > "$ANYKERNEL_FIXTURE"
+chmod 755 "$ANYKERNEL_FIXTURE"
 configure_anykernel_properties "$ANYKERNEL_FIXTURE" "Test Kernel" "salami OP591BL1 OP594DL1 aston OP5D35L1" "16"
+assert_eq "755" "$(stat -c '%a' "$ANYKERNEL_FIXTURE")" "AnyKernel script permissions"
 grep -q '^kernel.string=Test Kernel$' "$ANYKERNEL_FIXTURE" || fail "AnyKernel string"
 grep -q '^do.devicecheck=1$' "$ANYKERNEL_FIXTURE" || fail "AnyKernel device check"
 grep -q '^device.name1=salami$' "$ANYKERNEL_FIXTURE" || fail "AnyKernel salami mapping"
@@ -274,7 +276,9 @@ printf '%s\n' \
   '  if [ ! "$match" ]; then' \
   '    abort " " "Unsupported device. Aborting...";' \
   '  fi;' > "$UPDATE_BINARY_FIXTURE"
+chmod 755 "$UPDATE_BINARY_FIXTURE"
 add_anykernel_devicecheck_diagnostics "$UPDATE_BINARY_FIXTURE"
+assert_eq "755" "$(stat -c '%a' "$UPDATE_BINARY_FIXTURE")" "update-binary permissions"
 grep -Fq 'ro.product.device=$device' "$UPDATE_BINARY_FIXTURE" \
   || fail "AnyKernel device diagnostics"
 
