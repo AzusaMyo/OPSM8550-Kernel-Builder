@@ -75,6 +75,10 @@ grep -Fq 'clone_repo "$MODULES_REPO" "$MODULES_BRANCH"' "${SCRIPT_DIR}/../clone-
   || fail "modules checkout must use its independently resolved branch"
 grep -Fq 'MAKE_ARGS+=("${KERNEL_MAKE_FLAG_ARRAY[@]}")' "$COMPILE_SCRIPT" \
   || fail "compile script must pass profile-specific flags to every make invocation"
+grep -Fq 'make "${MAKE_ARGS[@]}" certs/extract-cert' "$COMPILE_SCRIPT" \
+  || fail "validation mode must smoke-compile the kernel certificate host tool"
+grep -Fq 'profile: SM8650 | OnePlus 12 | crDroid' "$UPSTREAM_HEALTH_WORKFLOW" \
+  || fail "upstream health must exercise the crDroid SM8650 certificate compatibility path"
 
 expected_socs=(sm7550 sm7550 sm8450 sm8450 sm8550 sm8550 sm8550 sm8550 sm8550 sm8650 sm8650 sm8650)
 expected_upstream_socs=(sm8550 sm8550 sm8450 sm8450 sm8550 sm8550 sm8550 sm8550 sm8550 sm8650 sm8650 sm8650)
@@ -217,7 +221,54 @@ UPDATE_BINARY_FIXTURE="$(mktemp)"
 KPM_CONFIG_FIXTURE="$(mktemp)"
 KPM_VERIFY_FIXTURE="$(mktemp -d)"
 NOMOUNT_FIXTURE_DIR="$(mktemp -d)"
-trap 'rm -f "$ANYKERNEL_FIXTURE" "$UPDATE_BINARY_FIXTURE" "$KPM_CONFIG_FIXTURE"; rm -rf "$KPM_VERIFY_FIXTURE" "$NOMOUNT_FIXTURE_DIR"' EXIT
+EXTRACT_CERT_FIXTURE_DIR="$(mktemp -d)"
+trap 'rm -f "$ANYKERNEL_FIXTURE" "$UPDATE_BINARY_FIXTURE" "$KPM_CONFIG_FIXTURE"; rm -rf "$KPM_VERIFY_FIXTURE" "$NOMOUNT_FIXTURE_DIR" "$EXTRACT_CERT_FIXTURE_DIR"' EXIT
+
+cat > "$EXTRACT_CERT_FIXTURE_DIR/extract-cert.c" <<'EOF'
+#include <openssl/engine.h>
+#ifdef USE_PKCS11_ENGINE
+static const char *key_pass;
+#endif
+int main(void)
+{
+#ifndef OPENSSL_IS_BORINGSSL
+#ifdef USE_PKCS11_ENGINE
+	key_pass = getenv("KBUILD_SIGN_PIN");
+#endif
+	if (key_pass)
+		ENGINE_ctrl_cmd_string(e, "PIN", key_pass, 0);
+}
+EOF
+repair_extract_cert_key_pass_guard "$EXTRACT_CERT_FIXTURE_DIR/extract-cert.c" >/dev/null
+if grep -Fq '#ifdef USE_PKCS11_ENGINE' "$EXTRACT_CERT_FIXTURE_DIR/extract-cert.c"; then
+  fail "extract-cert compatibility repair left the broken key_pass guards in place"
+fi
+assert_eq "1" "$(grep -Fc 'static const char *key_pass;' "$EXTRACT_CERT_FIXTURE_DIR/extract-cert.c")" \
+  "extract-cert key_pass declaration"
+assert_eq "1" "$(grep -Fc 'key_pass = getenv("KBUILD_SIGN_PIN");' "$EXTRACT_CERT_FIXTURE_DIR/extract-cert.c")" \
+  "extract-cert key_pass assignment"
+EXTRACT_CERT_REPAIRED_HASH="$(sha256sum "$EXTRACT_CERT_FIXTURE_DIR/extract-cert.c" | cut -d' ' -f1)"
+repair_extract_cert_key_pass_guard "$EXTRACT_CERT_FIXTURE_DIR/extract-cert.c" >/dev/null
+assert_eq "$EXTRACT_CERT_REPAIRED_HASH" \
+  "$(sha256sum "$EXTRACT_CERT_FIXTURE_DIR/extract-cert.c" | cut -d' ' -f1)" \
+  "extract-cert repair idempotence"
+
+cat > "$EXTRACT_CERT_FIXTURE_DIR/provider-extract-cert.c" <<'EOF'
+#define USE_PKCS11_PROVIDER
+#ifndef OPENSSL_IS_BORINGSSL
+#ifdef USE_PKCS11_ENGINE
+static const char *key_pass;
+#endif
+#ifdef USE_PKCS11_ENGINE
+	key_pass = getenv("KBUILD_SIGN_PIN");
+#endif
+ENGINE_ctrl_cmd_string(e, "PIN", key_pass, 0);
+EOF
+EXTRACT_CERT_PROVIDER_HASH="$(sha256sum "$EXTRACT_CERT_FIXTURE_DIR/provider-extract-cert.c" | cut -d' ' -f1)"
+repair_extract_cert_key_pass_guard "$EXTRACT_CERT_FIXTURE_DIR/provider-extract-cert.c" >/dev/null
+assert_eq "$EXTRACT_CERT_PROVIDER_HASH" \
+  "$(sha256sum "$EXTRACT_CERT_FIXTURE_DIR/provider-extract-cert.c" | cut -d' ' -f1)" \
+  "provider-aware extract-cert source preservation"
 
 mkdir -p \
   "$KPM_VERIFY_FIXTURE/out/drivers/kernelsu/infra" \
@@ -303,4 +354,4 @@ insert_line_before_last_match \
 assert_eq "4" "$(grep -nF 'source "fs/nomount/Kconfig"' "$NOMOUNT_FIXTURE_DIR/Kconfig" | cut -d: -f1)" \
   "NoMount Kconfig insertion"
 
-echo "PASS: profiles, KPM, SUSFS floor, NoMount integration, and AnyKernel protection"
+echo "PASS: profiles, source compatibility, KPM, SUSFS floor, NoMount integration, and AnyKernel protection"

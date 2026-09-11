@@ -22,7 +22,9 @@ Shell implementation used by the GitHub Actions workflows.
 - `lib/git-helpers.sh` provides bounded retries for upstream ref lookup and fetches.
 - `lib/anykernel-helpers.sh` applies and verifies device/version protection in
   AnyKernel3 properties.
-- `lib/kernel-helpers.sh` edits and verifies Kconfig values and source insertions.
+- `lib/kernel-helpers.sh` edits and verifies Kconfig values and source insertions,
+  and repairs the narrowly identified legacy `extract-cert` `key_pass` guard
+  regression without changing provider-aware implementations.
 - `lib/ksu-setup.sh` checks out the selected KernelSU-compatible implementation
   at the exact resolved commit and connects it to the kernel driver tree.
 - `lib/susfs-apply.sh` applies SUSFS at an exact commit, repairs explicitly

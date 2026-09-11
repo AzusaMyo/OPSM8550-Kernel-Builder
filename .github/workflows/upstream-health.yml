@@ -47,6 +47,8 @@ jobs:
         include:
           - integration: No root changes
             profile: SM8550 | OnePlus 11 | LunarisOS
+          - integration: No root changes
+            profile: SM8650 | OnePlus 12 | crDroid
     steps:
       - name: Checkout pipeline
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

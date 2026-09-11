@@ -74,6 +74,66 @@ detect_kernelsu_driver_dir() {
   fi
 }
 
+# Repair a stable-backport merge regression where key_pass was guarded as if
+# the OpenSSL provider implementation were present, while the older ENGINE
+# implementation still referenced it unconditionally. Keep this deliberately
+# pattern-gated so newer extract-cert implementations remain untouched.
+repair_extract_cert_key_pass_guard() {
+  local source_file="${1:-certs/extract-cert.c}"
+  local tmp_file
+
+  [[ -f "$source_file" ]] || return 0
+  grep -Fq 'ENGINE_ctrl_cmd_string(e, "PIN", key_pass, 0)' "$source_file" || return 0
+  grep -Fq '#ifdef USE_PKCS11_ENGINE' "$source_file" || return 0
+  grep -Fq '#ifndef OPENSSL_IS_BORINGSSL' "$source_file" || return 0
+
+  # Provider-aware versions legitimately scope key_pass to the ENGINE path.
+  if grep -Fq 'USE_PKCS11_PROVIDER' "$source_file"; then
+    return 0
+  fi
+
+  tmp_file="$(mktemp)"
+  if ! awk '
+    $0 == "#ifdef USE_PKCS11_ENGINE" {
+      if ((getline guarded_line) <= 0 || (getline endif_line) <= 0) {
+        exit 1
+      }
+      if (endif_line == "#endif" &&
+          (guarded_line == "static const char *key_pass;" ||
+           guarded_line ~ /^[[:space:]]*key_pass = getenv\("KBUILD_SIGN_PIN"\);$/)) {
+        print guarded_line
+        repaired++
+        next
+      }
+      print $0
+      print guarded_line
+      print endif_line
+      next
+    }
+    { print }
+    END {
+      if (repaired != 2) {
+        exit 1
+      }
+    }
+  ' "$source_file" > "$tmp_file"; then
+    rm -f "$tmp_file"
+    echo "::error::Recognized the extract-cert key_pass regression, but its guarded blocks did not match the expected form."
+    return 1
+  fi
+
+  chmod --reference="$source_file" "$tmp_file"
+  mv "$tmp_file" "$source_file"
+
+  if [[ "$(grep -Fc 'static const char *key_pass;' "$source_file")" -ne 1 ]] ||
+     [[ "$(grep -Fc 'key_pass = getenv("KBUILD_SIGN_PIN");' "$source_file")" -ne 1 ]]; then
+    echo "::error::extract-cert key_pass compatibility repair did not produce the expected source."
+    return 1
+  fi
+
+  echo "[+] Repaired the legacy extract-cert key_pass guard regression."
+}
+
 kernelsu_kconfig_source_path() {
   local driver_dir="$1"
   echo "${driver_dir}/kernelsu/Kconfig"

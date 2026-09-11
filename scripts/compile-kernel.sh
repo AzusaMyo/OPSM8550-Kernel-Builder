@@ -116,6 +116,7 @@ ccache --zero-stats || true
 CONFIG_STARTED_AT="$(date +%s)"
 BUILD_PHASE="source integration"
 
+repair_extract_cert_key_pass_guard certs/extract-cert.c
 install_ksu_variant "${KSU_TYPE}"
 
 if [[ "$KSU_TYPE" == *KPM* ]]; then
@@ -175,6 +176,15 @@ fi
 CONFIG_SECONDS=$(($(date +%s) - CONFIG_STARTED_AT))
 
 if [[ "$BUILD_MODE" == "Patch/config validation only" ]]; then
+  BUILD_PHASE="host-tool smoke compile"
+  COMPILE_STARTED_AT="$(date +%s)"
+  if ! make "${MAKE_ARGS[@]}" certs/extract-cert; then
+    COMPILE_SECONDS=$(($(date +%s) - COMPILE_STARTED_AT))
+    echo "::error::Kernel certificate host-tool smoke compile failed."
+    exit 1
+  fi
+  COMPILE_SECONDS=$(($(date +%s) - COMPILE_STARTED_AT))
+
   SMOKE_TARGETS=()
   if [[ "$KSU_TYPE" == *susfs* ]]; then
     SMOKE_TARGETS+=(
@@ -203,11 +213,11 @@ if [[ "$BUILD_MODE" == "Patch/config validation only" ]]; then
     BUILD_PHASE="integration object smoke compile"
     COMPILE_STARTED_AT="$(date +%s)"
     if ! make -j"$(nproc)" "${MAKE_ARGS[@]}" "${SMOKE_TARGETS[@]}" 2>&1 | tee integration-smoke.log; then
-      COMPILE_SECONDS=$(($(date +%s) - COMPILE_STARTED_AT))
+      COMPILE_SECONDS=$((COMPILE_SECONDS + $(date +%s) - COMPILE_STARTED_AT))
       echo "::error::SUSFS/NoMount/KPM integration object smoke compile failed."
       exit 1
     fi
-    COMPILE_SECONDS=$(($(date +%s) - COMPILE_STARTED_AT))
+    COMPILE_SECONDS=$((COMPILE_SECONDS + $(date +%s) - COMPILE_STARTED_AT))
     if [[ "$KSU_TYPE" == *susfs* ]]; then
       verify_susfs_binary_presence
     fi
