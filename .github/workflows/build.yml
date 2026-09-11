@@ -72,11 +72,12 @@ on:
           - clang-r450784d (Android 13 / LineageOS 20 era)
           - clang-r416183b1 (Android 12 / LineageOS 19.1 era)
       root_solution:
-        description: KernelSU / root add-on preset
+        description: KernelSU / root add-on preset; the batch option builds all three listed variants
         required: true
         type: choice
         default: No root changes
         options:
+          - Build all 3 featured SUSFS variants (batch)
           - No root changes
           - Official KernelSU
           - KernelSU-Next
@@ -141,17 +142,18 @@ jobs:
           echo "[release] Reserved ${RELEASE_TAG} at ${GITHUB_SHA}."
 
   build:
-    name: Build ${{ inputs.root_solution }}
+    name: Build ${{ matrix.root_solution }}
     needs: reserve_release_tag
     if: ${{ always() && (needs.reserve_release_tag.result == 'success' || needs.reserve_release_tag.result == 'skipped') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        root_solution: ${{ fromJSON(inputs.root_solution == 'Build all 3 featured SUSFS variants (batch)' && '["SukiSU Ultra + SUSFS + NoMount + KPM (experimental)","ReSukiSU + SUSFS + NoMount (experimental)","KernelSU-Next + SUSFS"]' || format('["{0}"]', inputs.root_solution)) }}
     concurrency:
-      group: kernel-ci-${{ github.ref_name }}-${{ inputs.build_profile }}-${{ inputs.root_solution }}-${{ inputs.branch_mode }}-${{ inputs.kernel_branch }}-${{ inputs.build_mode }}
+      group: kernel-ci-${{ github.ref_name }}-${{ inputs.build_profile }}-${{ matrix.root_solution }}-${{ inputs.branch_mode }}-${{ inputs.kernel_branch }}-${{ inputs.build_mode }}
       cancel-in-progress: true
-    outputs:
-      artifact_name: ${{ steps.metadata.outputs.artifact_name }}
-      release_name: ${{ steps.metadata.outputs.release_name }}
 
     env:
       DEBIAN_FRONTEND: noninteractive
@@ -169,7 +171,7 @@ jobs:
           INPUT_BRANCH_MODE: ${{ inputs.branch_mode }}
           INPUT_KERNEL_BRANCH: ${{ inputs.kernel_branch }}
           INPUT_CLANG_CHOICE: ${{ inputs.clang_choice }}
-          INPUT_ROOT_SOLUTION: ${{ inputs.root_solution }}
+          INPUT_ROOT_SOLUTION: ${{ matrix.root_solution }}
           INPUT_BUILD_MODE: ${{ inputs.build_mode }}
         run: bash scripts/resolve-profile.sh
 
@@ -179,23 +181,20 @@ jobs:
           set -euo pipefail
           SAFE_KERNEL_BRANCH="${KERNEL_BRANCH//\//-}"
           BUILD_TIMESTAMP="$(date -u +'%Y%m%d_%H%M%S')"
-          ARTIFACT_NAME="kernel-package-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          DIAGNOSTICS_NAME="kernel-diagnostics-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          RELEASE_NAME="${PROFILE_ID}_${KSU_TYPE}_r${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"
-          CCACHE_KEY_PREFIX="${RUNNER_OS}-ccache-v2-${SOC}-${SOURCE_SLUG}-${PROFILE_ID}-${SAFE_KERNEL_BRANCH}-${CLANG_VERSION}"
+          ARTIFACT_NAME="kernel-package-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${KSU_TYPE}"
+          DIAGNOSTICS_NAME="kernel-diagnostics-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${KSU_TYPE}"
+          CCACHE_KEY_PREFIX="${RUNNER_OS}-ccache-v2-${SOC}-${SOURCE_SLUG}-${PROFILE_ID}-${SAFE_KERNEL_BRANCH}-${CLANG_VERSION}-${KSU_TYPE}"
           CCACHE_EPOCH="$(date -u +'%G-W%V')"
           {
             echo "BUILD_TIMESTAMP=${BUILD_TIMESTAMP}"
             echo "SAFE_KERNEL_BRANCH=${SAFE_KERNEL_BRANCH}"
             echo "ARTIFACT_NAME=${ARTIFACT_NAME}"
             echo "DIAGNOSTICS_NAME=${DIAGNOSTICS_NAME}"
-            echo "RELEASE_NAME=${RELEASE_NAME}"
             echo "CCACHE_KEY_PREFIX=${CCACHE_KEY_PREFIX}"
             echo "CCACHE_KEY=${CCACHE_KEY_PREFIX}-${CCACHE_EPOCH}"
           } >> "$GITHUB_ENV"
           {
             echo "artifact_name=${ARTIFACT_NAME}"
-            echo "release_name=${RELEASE_NAME}"
           } >> "$GITHUB_OUTPUT"
 
       - name: Restore AOSP Clang cache
@@ -349,25 +348,55 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
       RELEASE_TAG: ${{ needs.reserve_release_tag.outputs.release_tag }}
-      RELEASE_NAME: ${{ needs.build.outputs.release_name }}
+      RELEASE_NAME: ${{ inputs.build_profile }} | ${{ inputs.root_solution }} | r${{ github.run_number }}.${{ github.run_attempt }}
 
     steps:
       - name: Download verified build outputs
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: ${{ needs.build.outputs.artifact_name }}
-          path: release-package
+          pattern: kernel-package-${{ github.run_id }}-${{ github.run_attempt }}-*
+          path: release-packages
 
-      - name: Verify release checksums
+      - name: Verify and stage release assets
         run: |
           set -euo pipefail
-          cd release-package
-          sha256sum --check SHA256SUMS
+          PACKAGE_ROOT="${GITHUB_WORKSPACE}/release-packages"
+          ASSET_DIR="${GITHUB_WORKSPACE}/release-assets"
+          NOTES_FILE="${ASSET_DIR}/release-notes.md"
+          mkdir -p "$ASSET_DIR"
+          : > "$NOTES_FILE"
+
+          package_count=0
+          for package_dir in "$PACKAGE_ROOT"/kernel-package-*; do
+            [[ -d "$package_dir" ]] || continue
+            package_count=$((package_count + 1))
+            artifact_name="$(basename "$package_dir")"
+            root_type="${artifact_name#kernel-package-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-}"
+            (
+              cd "$package_dir"
+              sha256sum --check SHA256SUMS
+            )
+            cp "$package_dir"/*.zip "$package_dir"/Image-* "$ASSET_DIR"/
+            cp "$package_dir/build-info.json" "$ASSET_DIR/build-info-${root_type}.json"
+            sed "s/  build-info.json$/  build-info-${root_type}.json/" \
+              "$package_dir/SHA256SUMS" > "$ASSET_DIR/SHA256SUMS-${root_type}"
+            {
+              echo "## ${root_type}"
+              echo
+              tail -n +3 "$package_dir/release-notes.md"
+              echo
+            } >> "$NOTES_FILE"
+          done
+
+          if (( package_count == 0 )); then
+            echo "::error::No build packages were downloaded for this workflow run."
+            exit 1
+          fi
 
       - name: Create or update release
         run: |
           set -euo pipefail
-          ASSET_DIR="${GITHUB_WORKSPACE}/release-package"
+          ASSET_DIR="${GITHUB_WORKSPACE}/release-assets"
           NOTES_FILE="${ASSET_DIR}/release-notes.md"
 
           ensure_release() {
@@ -401,7 +430,7 @@ jobs:
           }
 
           ensure_release
-          for asset in "$ASSET_DIR"/*.zip "$ASSET_DIR"/Image-* "$ASSET_DIR"/build-info.json "$ASSET_DIR"/SHA256SUMS; do
+          for asset in "$ASSET_DIR"/*.zip "$ASSET_DIR"/Image-* "$ASSET_DIR"/build-info-*.json "$ASSET_DIR"/SHA256SUMS-*; do
             upload_asset "$asset"
           done
 

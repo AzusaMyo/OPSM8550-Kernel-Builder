@@ -83,6 +83,12 @@ Available workflow presets:
 | `ReSukiSU + susfs` | ReSukiSU with SUSFS | Supported |
 | `ReSukiSU + SUSFS + NoMount (experimental)` | ReSukiSU with SUSFS and NoMount | Experimental |
 
+Selecting `Build all 3 featured SUSFS variants (batch)` starts a three-entry
+matrix in one workflow run for `SukiSU Ultra + SUSFS + NoMount + KPM`,
+`ReSukiSU + SUSFS + NoMount`, and `KernelSU-Next + SUSFS`. Each entry keeps its
+own package and diagnostics artifact; release mode publishes all three builds
+under the same immutable release tag.
+
 KPM is available only through the dedicated SukiSU Ultra presets because current
 ReSukiSU no longer supports it. The pipeline resolves SukiSU Ultra to an exact
 `main` commit, checks its KPM sources and Kbuild wiring, and enables `CONFIG_KPM`,

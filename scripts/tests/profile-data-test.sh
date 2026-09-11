@@ -124,6 +124,14 @@ grep -Fq -- '- ReSukiSU + SUSFS + NoMount (experimental)' "$WORKFLOW_FILE" \
   || fail "workflow is missing the NoMount root option"
 grep -Fq -- '- KernelSU-Next + SUSFS' "$WORKFLOW_FILE" \
   || fail "workflow is missing the KernelSU-Next SUSFS root option"
+grep -Fq -- '- Build all 3 featured SUSFS variants (batch)' "$WORKFLOW_FILE" \
+  || fail "workflow is missing the three-variant batch root option"
+grep -Fq 'name: Build ${{ matrix.root_solution }}' "$WORKFLOW_FILE" \
+  || fail "workflow build job does not use the root-solution matrix"
+grep -Fq '"SukiSU Ultra + SUSFS + NoMount + KPM (experimental)","ReSukiSU + SUSFS + NoMount (experimental)","KernelSU-Next + SUSFS"' "$WORKFLOW_FILE" \
+  || fail "workflow batch matrix does not contain the three featured SUSFS variants"
+grep -Fq 'ARTIFACT_NAME="kernel-package-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${KSU_TYPE}"' "$WORKFLOW_FILE" \
+  || fail "workflow package artifact names must be unique across the batch matrix"
 grep -Fq 'KSU_REPO="https://github.com/pershoot/KernelSU-Next.git"' "$RESOLVER_SCRIPT" \
   || fail "KernelSU-Next SUSFS must resolve the compatible dev-susfs fork"
 grep -Fq 'KSU_REF="dev-susfs"' "$RESOLVER_SCRIPT" \
