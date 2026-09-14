@@ -205,7 +205,7 @@ resolve_known_sukisu_susfs_rejects() {
   grep -Fq 'ksu_init_symbol_resolver();' "$init_file" || return 1
   grep -Fq 'kernelsu-objs += infra/symbol_resolver.o' "$kbuild_file" || return 1
 
-  if grep -Eq 'ksu_syscall_hook_(init|manager_init)|ksu_lsm_hook_init' "$init_file"; then
+  if grep -Eq 'ksu_(late_loaded|bundled)|ksu_syscall_hook_(init|manager_init)|ksu_lsm_hook_init' "$init_file"; then
     return 1
   fi
 

@@ -166,6 +166,12 @@ grep -Fq 'kernelsu-objs += infra/symbol_resolver.o' "$SUKISU_SUSFS_COMPAT_PATCH"
   || fail "SukiSU SUSFS/KPM compatibility patch does not restore the symbol resolver object"
 grep -Fq 'ksu_init_symbol_resolver();' "$SUKISU_SUSFS_COMPAT_PATCH" \
   && fail "SukiSU SUSFS/KPM compatibility patch must preserve, not duplicate, resolver initialization"
+grep -Fq -- '-    ksu_late_loaded = (current->pid != 1);' "$SUKISU_SUSFS_COMPAT_PATCH" \
+  || fail "SukiSU SUSFS/KPM compatibility patch does not remove stale late-load initialization"
+grep -Fq -- '-bool ksu_bundled = false;' "$SUKISU_SUSFS_COMPAT_PATCH" \
+  || fail "SukiSU SUSFS/KPM compatibility patch does not remove stale bundled state"
+grep -Fq "ksu_(late_loaded|bundled)" "$SUSFS_APPLY_SCRIPT" \
+  || fail "SukiSU SUSFS drift resolver does not reject stale late-load state"
 test -f "$SUKISU_SUSFS_POLICY_COMPAT_PATCH" \
   || fail "SUSFS integration is missing the guarded SukiSU policy compatibility patch"
 grep -Fq 'webview_zygote (controlled by feature policy)' "$SUKISU_SUSFS_POLICY_COMPAT_PATCH" \
