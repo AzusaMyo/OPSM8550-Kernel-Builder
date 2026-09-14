@@ -202,13 +202,13 @@ resolve_susfs_settings sm8550 lineage-23.2
 assert_eq "gki-android14-5.15" "$SUSFS_REF" "Android 16 susfs"
 resolve_susfs_settings sm7550 lineage-23.0
 assert_eq "gki-android14-5.15" "$SUSFS_REF" "Nord CE4 susfs"
-assert_eq "ed3d6d9c9a2652e1c70f153f5358701e996d646c" \
+assert_eq "2c774fdb4f0aaa743598c1bec787f6c935574ed1" \
   "$(sukisu_compatible_susfs_commit gki-android13-5.10)" "SukiSU Android 13 5.10 SUSFS pin"
-assert_eq "bca0d2333c1a7d717e7278b019d7af7ba1d16005" \
+assert_eq "7af04b08f86a5f811cbea28805f96d52368e005f" \
   "$(sukisu_compatible_susfs_commit gki-android13-5.15)" "SukiSU Android 13 5.15 SUSFS pin"
-assert_eq "d54b51724afa912c4c99bb99731354ce934d1889" \
+assert_eq "aab99ba7693d94489fd32f1cc4c9d58396fffeee" \
   "$(sukisu_compatible_susfs_commit gki-android14-5.15)" "SukiSU Android 14 5.15 SUSFS pin"
-assert_eq "4fc9c1898ea66f51847cdbc0d1473ea4ef525a70" \
+assert_eq "6c2b5042ec656cd3ce9ad352a1e226e2e9e26779" \
   "$(sukisu_compatible_susfs_commit gki-android14-6.1)" "SukiSU Android 14 6.1 SUSFS pin"
 if sukisu_compatible_susfs_commit unsupported >/dev/null 2>&1; then
   fail "unknown SukiSU SUSFS branches must not silently fall back to HEAD"
