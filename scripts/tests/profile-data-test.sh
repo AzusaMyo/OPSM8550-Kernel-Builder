@@ -34,6 +34,7 @@ assert_eq "12" "${#profiles[@]}" "profile count"
 WORKFLOW_FILE="${SCRIPT_DIR}/../../.github/workflows/build.yml"
 UPSTREAM_HEALTH_WORKFLOW="${SCRIPT_DIR}/../../.github/workflows/upstream-health.yml"
 COMPILE_SCRIPT="${SCRIPT_DIR}/../compile-kernel.sh"
+ANYKERNEL_PACKAGE_SCRIPT="${SCRIPT_DIR}/../make-anykernel-zip.sh"
 RESOLVER_SCRIPT="${SCRIPT_DIR}/../resolve-profile.sh"
 KSU_SETUP_SCRIPT="${SCRIPT_DIR}/../lib/ksu-setup.sh"
 GIT_HELPERS_SCRIPT="${SCRIPT_DIR}/../lib/git-helpers.sh"
@@ -88,6 +89,10 @@ grep -Fq 'ANYKERNEL_REPO="https://github.com/osm0sis/AnyKernel3.git"' "$RESOLVER
   || fail "resolver must use the canonical live AnyKernel3 repository"
 grep -Fq 'ANYKERNEL_COMMIT="020dfeccf9d7e962a48400fc94d3e451df92eead"' "$RESOLVER_SCRIPT" \
   || fail "resolver must pin the tested AnyKernel3 revision"
+grep -Fq 'sanitize_cached_anykernel_checkout AnyKernel3' "$ANYKERNEL_PACKAGE_SCRIPT" \
+  || fail "AnyKernel packaging must sanitize a restored checkout"
+grep -Fq 'git checkout -q --force --detach FETCH_HEAD' "$ANYKERNEL_PACKAGE_SCRIPT" \
+  || fail "AnyKernel packaging must force the pinned detached checkout"
 if grep -Fq 'Kernel-SU/AnyKernel3.git' "$RESOLVER_SCRIPT"; then
   fail "resolver still references the removed Kernel-SU AnyKernel3 fork"
 fi
@@ -252,7 +257,9 @@ SPINLOCK_KCONFIG_FIXTURE="$(mktemp)"
 KPM_VERIFY_FIXTURE="$(mktemp -d)"
 NOMOUNT_FIXTURE_DIR="$(mktemp -d)"
 EXTRACT_CERT_FIXTURE_DIR="$(mktemp -d)"
-trap 'rm -f "$ANYKERNEL_FIXTURE" "$UPDATE_BINARY_FIXTURE" "$KPM_CONFIG_FIXTURE" "$MODULE_CONFIG_FIXTURE" "$SPINLOCK_KCONFIG_FIXTURE"; rm -rf "$KPM_VERIFY_FIXTURE" "$NOMOUNT_FIXTURE_DIR" "$EXTRACT_CERT_FIXTURE_DIR"' EXIT
+ANYKERNEL_CACHE_FIXTURE_DIR="$(mktemp -d)"
+ANYKERNEL_PACKAGE_FIXTURE_DIR="$(mktemp -d)"
+trap 'rm -f "$ANYKERNEL_FIXTURE" "$UPDATE_BINARY_FIXTURE" "$KPM_CONFIG_FIXTURE" "$MODULE_CONFIG_FIXTURE" "$SPINLOCK_KCONFIG_FIXTURE"; rm -rf "$KPM_VERIFY_FIXTURE" "$NOMOUNT_FIXTURE_DIR" "$EXTRACT_CERT_FIXTURE_DIR" "$ANYKERNEL_CACHE_FIXTURE_DIR" "$ANYKERNEL_PACKAGE_FIXTURE_DIR"' EXIT
 
 cat > "$EXTRACT_CERT_FIXTURE_DIR/extract-cert.c" <<'EOF'
 #include <openssl/engine.h>
@@ -447,6 +454,99 @@ grep -q '^device.name2=OP591BL1$' "$ANYKERNEL_FIXTURE" || fail "AnyKernel stock 
 grep -q '^device.name4=aston$' "$ANYKERNEL_FIXTURE" || fail "AnyKernel aston mapping"
 grep -q '^device.name5=OP5D35L1$' "$ANYKERNEL_FIXTURE" || fail "AnyKernel 12R stock ID mapping"
 grep -q '^supported.versions=16$' "$ANYKERNEL_FIXTURE" || fail "AnyKernel Android mapping"
+
+git -C "$ANYKERNEL_CACHE_FIXTURE_DIR" init -q
+git -C "$ANYKERNEL_CACHE_FIXTURE_DIR" config user.name fixture
+git -C "$ANYKERNEL_CACHE_FIXTURE_DIR" config user.email fixture@example.invalid
+printf '%s\n' 'kernel.string=upstream' > "$ANYKERNEL_CACHE_FIXTURE_DIR/anykernel.sh"
+git -C "$ANYKERNEL_CACHE_FIXTURE_DIR" add anykernel.sh
+git -C "$ANYKERNEL_CACHE_FIXTURE_DIR" commit -qm fixture
+printf '%s\n' 'kernel.string=modified-by-prior-matrix-job' > "$ANYKERNEL_CACHE_FIXTURE_DIR/anykernel.sh"
+printf '%s\n' stale > "$ANYKERNEL_CACHE_FIXTURE_DIR/Image"
+sanitize_cached_anykernel_checkout "$ANYKERNEL_CACHE_FIXTURE_DIR"
+grep -q '^kernel.string=upstream$' "$ANYKERNEL_CACHE_FIXTURE_DIR/anykernel.sh" \
+  || fail "cached AnyKernel sanitation did not restore tracked files"
+test ! -e "$ANYKERNEL_CACHE_FIXTURE_DIR/Image" \
+  || fail "cached AnyKernel sanitation did not remove generated files"
+test -z "$(git -C "$ANYKERNEL_CACHE_FIXTURE_DIR" status --porcelain)" \
+  || fail "cached AnyKernel sanitation left a dirty checkout"
+
+mkdir -p \
+  "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source/META-INF/com/google/android" \
+  "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/sm8550/out/arch/arm64/boot" \
+  "$ANYKERNEL_PACKAGE_FIXTURE_DIR/bin"
+printf '%s\n' \
+  'kernel.string=placeholder' \
+  'do.devicecheck=0' \
+  'device.name1=' \
+  'device.name2=' \
+  'device.name3=' \
+  'device.name4=' \
+  'device.name5=' \
+  'supported.versions=' \
+  > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source/anykernel.sh"
+printf '%s\n' \
+  '  if [ ! "$match" ]; then' \
+  '    abort " " "Unsupported device. Aborting...";' \
+  '  fi;' \
+  > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source/META-INF/com/google/android/update-binary"
+chmod 755 \
+  "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source/anykernel.sh" \
+  "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source/META-INF/com/google/android/update-binary"
+git -C "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source" init -q
+git -C "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source" config user.name fixture
+git -C "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source" config user.email fixture@example.invalid
+git -C "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source" add .
+git -C "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source" commit -qm fixture
+ANYKERNEL_PACKAGE_COMMIT="$(git -C "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source" rev-parse HEAD)"
+git clone -q "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source" "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3"
+printf '%s\n' 'kernel.string=dirty-cache' > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/anykernel.sh"
+printf '%s\n' stale > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/Image"
+printf '%s\n' image > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/sm8550/out/arch/arm64/boot/Image"
+cat > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/bin/jq" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' '{}'
+EOF
+cat > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/bin/zip" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' zip-fixture > "$2"
+EOF
+chmod +x "$ANYKERNEL_PACKAGE_FIXTURE_DIR/bin/jq" "$ANYKERNEL_PACKAGE_FIXTURE_DIR/bin/zip"
+
+for package_timestamp in 20260101_000000 20260101_000001; do
+  (
+    cd "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work"
+    PATH="$ANYKERNEL_PACKAGE_FIXTURE_DIR/bin:$PATH" \
+    SOC=sm8550 \
+    PROFILE_ID=test-profile \
+    TARGET_NAME='Test target' \
+    DEVICE_CODENAMES='salami aston' \
+    DEVICE_NAMES='salami aston' \
+    SUPPORTED_ANDROID_VERSIONS=16 \
+    SOURCE_NAME=test \
+    KERNEL_BRANCH=test \
+    MODULES_BRANCH=test \
+    KERNEL_COMMIT=1111111111111111111111111111111111111111 \
+    MODULES_COMMIT=2222222222222222222222222222222222222222 \
+    CLANG_VERSION=test-clang \
+    KSU_TYPE=KernelSU-Next-with-susfs \
+    KSU_COMMIT=3333333333333333333333333333333333333333 \
+    SUSFS_REF=test \
+    SUSFS_COMMIT=4444444444444444444444444444444444444444 \
+    SUSFS_VERSION=2.3.0 \
+    BUILD_TIMESTAMP="$package_timestamp" \
+    GITHUB_WORKSPACE="$ANYKERNEL_PACKAGE_FIXTURE_DIR/work" \
+    GITHUB_ENV="$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/github-env" \
+    GITHUB_OUTPUT="$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/github-output" \
+    ANYKERNEL_REPO="$ANYKERNEL_PACKAGE_FIXTURE_DIR/source" \
+    ANYKERNEL_COMMIT="$ANYKERNEL_PACKAGE_COMMIT" \
+    bash "$ANYKERNEL_PACKAGE_SCRIPT" >/dev/null
+  )
+  test -s "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/release-assets/test-profile_KernelSU-Next-with-susfs_111111111111_${package_timestamp}.zip" \
+    || fail "AnyKernel packaging did not produce the flashable archive"
+  test -s "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/release-assets/SHA256SUMS" \
+    || fail "AnyKernel packaging did not produce checksums"
+done
 
 for i in "${!profiles[@]}"; do
   resolve_build_profile "${profiles[$i]}"

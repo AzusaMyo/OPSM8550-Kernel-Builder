@@ -3,6 +3,26 @@
 # Safe AnyKernel3 property editing helpers.
 #
 
+sanitize_cached_anykernel_checkout() {
+  local repo_dir="$1"
+
+  test -d "${repo_dir}/.git" || {
+    echo "::error::Cached AnyKernel3 checkout is not a Git repository: ${repo_dir}"
+    return 1
+  }
+
+  # The cache is saved after packaging, when tracked files such as
+  # anykernel.sh have already been customized. Restore the cached checkout to
+  # its recorded commit before fetching/checking out the pinned revision.
+  git -C "$repo_dir" reset --hard -q HEAD
+  git -C "$repo_dir" clean -qfdx
+
+  if [[ -n "$(git -C "$repo_dir" status --porcelain)" ]]; then
+    echo "::error::Could not sanitize the cached AnyKernel3 checkout."
+    return 1
+  fi
+}
+
 replace_file_preserving_mode() {
   local replacement="$1"
   local destination="$2"

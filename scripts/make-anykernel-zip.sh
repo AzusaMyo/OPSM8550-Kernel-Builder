@@ -62,13 +62,14 @@ fi
 
 if [[ -d AnyKernel3/.git ]]; then
   echo "[+] Reusing cached AnyKernel3 checkout."
+  sanitize_cached_anykernel_checkout AnyKernel3
   (
     cd AnyKernel3
-    git clean -fdx
     git remote set-url origin "$ANYKERNEL_REPO"
     git_fetch_retry . --depth=1 --no-tags origin "$ANYKERNEL_COMMIT"
-    git checkout -q --detach FETCH_HEAD
-    git reset --hard "$ANYKERNEL_COMMIT"
+    git checkout -q --force --detach FETCH_HEAD
+    git reset --hard -q "$ANYKERNEL_COMMIT"
+    git clean -qfdx
   )
 else
   rm -rf AnyKernel3
