@@ -305,11 +305,6 @@ mkdir -p \
 : > "$KPM_VERIFY_FIXTURE/out/drivers/kernelsu/infra/symbol_resolver.o"
 printf '%s\n' '0000000000001000 T sukisu_handle_kpm' > "$KPM_VERIFY_FIXTURE/out/System.map"
 printf '%s\n' \
-  $'0x00000001\t_raw_spin_lock\tvmlinux\tEXPORT_SYMBOL' \
-  $'0x00000002\t_raw_spin_unlock\tvmlinux\tEXPORT_SYMBOL' \
-  $'0x00000003\tkasan_flag_enabled\tvmlinux\tEXPORT_SYMBOL' \
-  > "$KPM_VERIFY_FIXTURE/out/Module.symvers"
-printf '%s\n' \
   'CONFIG_MODULES=y' \
   'CONFIG_MODULE_UNLOAD=y' \
   'CONFIG_MODVERSIONS=y' \
@@ -320,8 +315,18 @@ printf '%s\n' \
   > "$KPM_VERIFY_FIXTURE/out/.config"
 cat > "$KPM_VERIFY_FIXTURE/toolchain/llvm-nm" <<'EOF'
 #!/usr/bin/env bash
-[[ "${*: -1}" == */infra/symbol_resolver.o ]] || exit 1
-printf '%s\n' '0000000000000000 T find_kernel_symbol_exact'
+case "${*: -1}" in
+  */infra/symbol_resolver.o)
+    printf '%s\n' '0000000000000000 T find_kernel_symbol_exact'
+    ;;
+  out/vmlinux)
+    printf '%s\n' \
+      '0000000000001000 r __ksymtab__raw_spin_lock' \
+      '0000000000001004 r __ksymtab__raw_spin_unlock' \
+      '0000000000001008 r __ksymtab_kasan_flag_enabled'
+    ;;
+  *) exit 1 ;;
+esac
 EOF
 chmod +x "$KPM_VERIFY_FIXTURE/toolchain/llvm-nm"
 (
@@ -334,6 +339,7 @@ chmod +x "$KPM_VERIFY_FIXTURE/toolchain/llvm-nm"
   verify_kpm_binary_presence >/dev/null
   grep -Fq 'T find_kernel_symbol_exact' kpm-proof.txt \
     || fail "KPM proof does not record the leaf resolver definition"
+  printf '%s\n' fixture > out/vmlinux
   verify_external_module_exports >/dev/null
   grep -Fq 'kasan_flag_enabled' external-module-proof.txt \
     || fail "external module proof does not record the required exports"

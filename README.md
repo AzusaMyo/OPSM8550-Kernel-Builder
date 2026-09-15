@@ -68,7 +68,7 @@ safely.
 Full builds preserve GKI module versioning and vendor-module compatibility, but
 disable unused-export trimming so post-boot external drivers can resolve normal
 kernel exports. The pipeline verifies `_raw_spin_lock`, `_raw_spin_unlock`, and
-`kasan_flag_enabled` in the final `Module.symvers`; this specifically prevents
+`kasan_flag_enabled` directly in the final `vmlinux` export table; this prevents
 shipping an image that later fails those symbols during `insmod`. Forced loading
 is available for loaders handling intentionally stripped version tables, but a
 module must still target the same kernel/KMI—forcing a genuinely incompatible

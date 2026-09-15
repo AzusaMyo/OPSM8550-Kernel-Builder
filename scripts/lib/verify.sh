@@ -4,20 +4,34 @@
 #
 
 verify_external_module_exports() {
+  local llvm_nm="${CLANG_ROOT:?}/llvm-nm"
   local symbol
+  local export_entry
+  local export_table
   local required_symbols=(
     _raw_spin_lock
     _raw_spin_unlock
     kasan_flag_enabled
   )
 
-  test -s out/Module.symvers || {
-    echo "::error::out/Module.symvers is missing; external-module exports cannot be verified."
+  test -s out/vmlinux || {
+    echo "::error::out/vmlinux is missing; external-module exports cannot be verified."
+    exit 1
+  }
+  test -x "$llvm_nm" || {
+    echo "::error::AOSP Clang llvm-nm is missing at ${llvm_nm}."
     exit 1
   }
 
+  if ! export_table="$("$llvm_nm" --defined-only out/vmlinux 2>/dev/null | \
+    awk '$NF ~ /^__ksymtab_/ { print $NF }')"; then
+    echo "::error::Could not inspect the final vmlinux export table with ${llvm_nm}."
+    exit 1
+  fi
+
   for symbol in "${required_symbols[@]}"; do
-    if ! awk -v expected="$symbol" '$2 == expected { found = 1 } END { exit !found }' out/Module.symvers; then
+    export_entry="__ksymtab_${symbol}"
+    if ! grep -Fxq "$export_entry" <<< "$export_table"; then
       echo "::error::External-module compatibility symbol ${symbol} is not exported by the final kernel."
       exit 1
     fi
@@ -27,8 +41,9 @@ verify_external_module_exports() {
     echo "==== EXTERNAL MODULE COMPATIBILITY PROOF ===="
     echo "kernel_branch=${KERNEL_BRANCH}"
     echo "kernel_commit=${KERNEL_COMMIT}"
+    echo "export_table=vmlinux __ksymtab"
     grep -E '^CONFIG_(MODULES|MODULE_UNLOAD|MODVERSIONS|MODULE_FORCE_LOAD|KASAN|KASAN_HW_TAGS)=|^# CONFIG_(TRIM_UNUSED_KSYMS|KASAN_GENERIC|KASAN_SW_TAGS) is not set$' out/.config || true
-    awk '$2 == "_raw_spin_lock" || $2 == "_raw_spin_unlock" || $2 == "kasan_flag_enabled"' out/Module.symvers
+    grep -E '^__ksymtab_(_raw_spin_lock|_raw_spin_unlock|kasan_flag_enabled)$' <<< "$export_table"
   } | tee external-module-proof.txt
 }
 
