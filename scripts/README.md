@@ -19,7 +19,8 @@ Shell implementation used by the GitHub Actions workflows.
 - `lib/profile-data.sh` contains pure profile, root, Clang, KPM, SUSFS, and Android
   version mappings, including source-specific repository and modules-branch
   overrides. It performs no network access and is covered by offline tests.
-- `lib/git-helpers.sh` provides bounded retries for upstream ref lookup and fetches.
+- `lib/git-helpers.sh` provides bounded five-attempt retries for upstream ref
+  lookup and fetches, with interactive credential prompts disabled in CI.
 - `lib/anykernel-helpers.sh` applies and verifies device/version protection in
   AnyKernel3 properties.
 - `lib/kernel-helpers.sh` edits and verifies Kconfig values and source insertions,
@@ -61,6 +62,8 @@ integration object compilation and a LunarisOS OnePlus 11 baseline smoke test.
 - Top-level scripts use `set -euo pipefail`.
 - Library files are sourced and do not enable shell options themselves.
 - Exact upstream commits are resolved before clone/fetch operations.
+- AnyKernel3 uses a tested commit from the canonical `osm0sis/AnyKernel3`
+  repository rather than the removed `Kernel-SU/AnyKernel3` fork.
 - Full builds pass ccache compiler launchers on the `make` command line and use
   deterministic Kbuild metadata for repeatability.
 - Unknown device/source pairs, invalid branch names, patch rejects, missing

@@ -36,6 +36,7 @@ UPSTREAM_HEALTH_WORKFLOW="${SCRIPT_DIR}/../../.github/workflows/upstream-health.
 COMPILE_SCRIPT="${SCRIPT_DIR}/../compile-kernel.sh"
 RESOLVER_SCRIPT="${SCRIPT_DIR}/../resolve-profile.sh"
 KSU_SETUP_SCRIPT="${SCRIPT_DIR}/../lib/ksu-setup.sh"
+GIT_HELPERS_SCRIPT="${SCRIPT_DIR}/../lib/git-helpers.sh"
 SUSFS_APPLY_SCRIPT="${SCRIPT_DIR}/../lib/susfs-apply.sh"
 SUKISU_SUSFS_COMPAT_PATCH="${SCRIPT_DIR}/../patches/sukisu-susfs-core-init-compat.patch"
 SUKISU_SUSFS_POLICY_COMPAT_PATCH="${SCRIPT_DIR}/../patches/sukisu-susfs-policy-compat.patch"
@@ -77,6 +78,19 @@ grep -Fq 'MAKE_ARGS+=("${KERNEL_MAKE_FLAG_ARRAY[@]}")' "$COMPILE_SCRIPT" \
   || fail "compile script must pass profile-specific flags to every make invocation"
 grep -Fq 'make "${MAKE_ARGS[@]}" certs/extract-cert' "$COMPILE_SCRIPT" \
   || fail "validation mode must smoke-compile the kernel certificate host tool"
+grep -Fq 'local max_attempts=5' "$GIT_HELPERS_SCRIPT" \
+  || fail "git network helpers must tolerate a longer transient outage"
+grep -Fq 'GIT_TERMINAL_PROMPT=0 git ls-remote' "$GIT_HELPERS_SCRIPT" \
+  || fail "git ref lookup must not wait for credentials in CI"
+grep -Fq 'GIT_TERMINAL_PROMPT=0 git -C "$repo_dir" fetch' "$GIT_HELPERS_SCRIPT" \
+  || fail "git fetch must not wait for credentials in CI"
+grep -Fq 'ANYKERNEL_REPO="https://github.com/osm0sis/AnyKernel3.git"' "$RESOLVER_SCRIPT" \
+  || fail "resolver must use the canonical live AnyKernel3 repository"
+grep -Fq 'ANYKERNEL_COMMIT="020dfeccf9d7e962a48400fc94d3e451df92eead"' "$RESOLVER_SCRIPT" \
+  || fail "resolver must pin the tested AnyKernel3 revision"
+if grep -Fq 'Kernel-SU/AnyKernel3.git' "$RESOLVER_SCRIPT"; then
+  fail "resolver still references the removed Kernel-SU AnyKernel3 fork"
+fi
 grep -Fq 'profile: SM8650 | OnePlus 12 | crDroid' "$UPSTREAM_HEALTH_WORKFLOW" \
   || fail "upstream health must exercise the crDroid SM8650 certificate compatibility path"
 

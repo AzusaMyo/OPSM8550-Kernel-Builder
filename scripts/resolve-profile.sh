@@ -169,13 +169,11 @@ if [[ ! "$MODULES_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
   exit 1
 fi
 
-ANYKERNEL_REPO="https://github.com/Kernel-SU/AnyKernel3.git"
-ANYKERNEL_COMMIT="$(git_ls_remote_retry --exit-code "$ANYKERNEL_REPO" HEAD \
-  | awk 'NR == 1 {print $1}')"
-if [[ ! "$ANYKERNEL_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
-  echo "::error::Could not resolve AnyKernel3 HEAD to a commit."
-  exit 1
-fi
+# Kernel-SU/AnyKernel3 disappeared on 2026-09-15 and made every matrix entry
+# fail during profile resolution. Use the canonical upstream and pin the tested
+# revision so packaging does not change underneath otherwise identical builds.
+ANYKERNEL_REPO="https://github.com/osm0sis/AnyKernel3.git"
+ANYKERNEL_COMMIT="020dfeccf9d7e962a48400fc94d3e451df92eead"
 
 case "$KERNEL_SOURCE" in
   OnePlusOSS)
