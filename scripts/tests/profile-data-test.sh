@@ -248,10 +248,11 @@ ANYKERNEL_FIXTURE="$(mktemp)"
 UPDATE_BINARY_FIXTURE="$(mktemp)"
 KPM_CONFIG_FIXTURE="$(mktemp)"
 MODULE_CONFIG_FIXTURE="$(mktemp)"
+SPINLOCK_KCONFIG_FIXTURE="$(mktemp)"
 KPM_VERIFY_FIXTURE="$(mktemp -d)"
 NOMOUNT_FIXTURE_DIR="$(mktemp -d)"
 EXTRACT_CERT_FIXTURE_DIR="$(mktemp -d)"
-trap 'rm -f "$ANYKERNEL_FIXTURE" "$UPDATE_BINARY_FIXTURE" "$KPM_CONFIG_FIXTURE" "$MODULE_CONFIG_FIXTURE"; rm -rf "$KPM_VERIFY_FIXTURE" "$NOMOUNT_FIXTURE_DIR" "$EXTRACT_CERT_FIXTURE_DIR"' EXIT
+trap 'rm -f "$ANYKERNEL_FIXTURE" "$UPDATE_BINARY_FIXTURE" "$KPM_CONFIG_FIXTURE" "$MODULE_CONFIG_FIXTURE" "$SPINLOCK_KCONFIG_FIXTURE"; rm -rf "$KPM_VERIFY_FIXTURE" "$NOMOUNT_FIXTURE_DIR" "$EXTRACT_CERT_FIXTURE_DIR"' EXIT
 
 cat > "$EXTRACT_CERT_FIXTURE_DIR/extract-cert.c" <<'EOF'
 #include <openssl/engine.h>
@@ -339,7 +340,12 @@ chmod +x "$KPM_VERIFY_FIXTURE/toolchain/llvm-nm"
   verify_kpm_binary_presence >/dev/null
   grep -Fq 'T find_kernel_symbol_exact' kpm-proof.txt \
     || fail "KPM proof does not record the leaf resolver definition"
-  printf '%s\n' fixture > out/vmlinux
+  printf '%s\n' \
+    '0x11111111 module_layout vmlinux EXPORT_SYMBOL' \
+    '0x22222222 _raw_spin_lock vmlinux EXPORT_SYMBOL' \
+    '0x33333333 _raw_spin_unlock vmlinux EXPORT_SYMBOL' \
+    '0x44444444 kasan_flag_enabled vmlinux EXPORT_SYMBOL' \
+    > out/vmlinux.symvers
   verify_external_module_exports >/dev/null
   grep -Fq 'kasan_flag_enabled' external-module-proof.txt \
     || fail "external module proof does not record the required exports"
@@ -361,6 +367,10 @@ CONFIG_MODULES=y
 # CONFIG_MODULE_UNLOAD is not set
 # CONFIG_MODVERSIONS is not set
 # CONFIG_MODULE_FORCE_LOAD is not set
+CONFIG_ARCH_INLINE_SPIN_LOCK=y
+CONFIG_ARCH_INLINE_SPIN_UNLOCK=y
+CONFIG_INLINE_SPIN_LOCK=y
+# CONFIG_UNINLINE_SPIN_UNLOCK is not set
 CONFIG_TRIM_UNUSED_KSYMS=y
 # CONFIG_KASAN is not set
 CONFIG_KASAN_GENERIC=y
@@ -374,6 +384,7 @@ for module_config in \
   CONFIG_MODULE_UNLOAD \
   CONFIG_MODVERSIONS \
   CONFIG_MODULE_FORCE_LOAD \
+  CONFIG_UNINLINE_SPIN_UNLOCK \
   CONFIG_KASAN \
   CONFIG_KASAN_HW_TAGS; do
   grep -q "^${module_config}=y$" "$MODULE_CONFIG_FIXTURE" \
@@ -381,12 +392,41 @@ for module_config in \
 done
 grep -q '^# CONFIG_TRIM_UNUSED_KSYMS is not set$' "$MODULE_CONFIG_FIXTURE" \
   || fail "external module exports must not be trimmed"
+for inline_config in \
+  CONFIG_ARCH_INLINE_SPIN_LOCK \
+  CONFIG_ARCH_INLINE_SPIN_UNLOCK \
+  CONFIG_INLINE_SPIN_LOCK; do
+  grep -q "^# ${inline_config} is not set$" "$MODULE_CONFIG_FIXTURE" \
+    || fail "external module compatibility must disable ${inline_config}"
+done
 grep -q '^# CONFIG_KASAN_GENERIC is not set$' "$MODULE_CONFIG_FIXTURE" \
   || fail "generic KASAN must not override hardware-tag KASAN"
 grep -q '^# CONFIG_KASAN_SW_TAGS is not set$' "$MODULE_CONFIG_FIXTURE" \
   || fail "software-tag KASAN must not override hardware-tag KASAN"
 grep -Fq 'verify_external_module_exports' "$COMPILE_SCRIPT" \
   || fail "full builds do not verify external module exports"
+grep -Fq 'enable_external_module_spinlock_exports arch/arm64/Kconfig' "$COMPILE_SCRIPT" \
+  || fail "builds do not make the raw spin functions exportable"
+
+cat > "$SPINLOCK_KCONFIG_FIXTURE" <<'EOF'
+config ARM64
+	bool "ARM64"
+	select ARCH_INLINE_SPIN_LOCK
+	select ARCH_INLINE_SPIN_LOCK_BH
+	select ARCH_INLINE_SPIN_UNLOCK
+	select ARCH_INLINE_SPIN_UNLOCK_BH
+EOF
+enable_external_module_spinlock_exports "$SPINLOCK_KCONFIG_FIXTURE" >/dev/null
+enable_external_module_spinlock_exports "$SPINLOCK_KCONFIG_FIXTURE" >/dev/null
+grep -Fq 'select ARCH_INLINE_SPIN_LOCK_BH' "$SPINLOCK_KCONFIG_FIXTURE" \
+  || fail "spinlock compatibility patch must preserve the BH inline selection"
+grep -Fq 'select ARCH_INLINE_SPIN_UNLOCK_BH' "$SPINLOCK_KCONFIG_FIXTURE" \
+  || fail "spinlock compatibility patch must preserve the unlock-BH inline selection"
+grep -Eq '^[[:space:]]*select UNINLINE_SPIN_UNLOCK[[:space:]]*$' "$SPINLOCK_KCONFIG_FIXTURE" \
+  || fail "spinlock compatibility patch must select the out-of-line unlock"
+if grep -Eq '^[[:space:]]*select ARCH_INLINE_SPIN_(LOCK|UNLOCK)[[:space:]]*$' "$SPINLOCK_KCONFIG_FIXTURE"; then
+  fail "spinlock compatibility patch did not disable the plain inline selections"
+fi
 
 printf '%s\n' \
   'kernel.string=placeholder' \

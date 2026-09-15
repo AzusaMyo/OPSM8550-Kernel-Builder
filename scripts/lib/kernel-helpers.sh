@@ -74,6 +74,32 @@ detect_kernelsu_driver_dir() {
   fi
 }
 
+# arm64 normally inlines the plain raw spin lock/unlock operations and therefore
+# does not compile the EXPORT_SYMBOL definitions in kernel/locking/spinlock.c.
+# External drivers can still reference those long-standing symbols, so keep just
+# these two operations out of line. Final config and symbol-table checks make
+# this guarded source adjustment fail closed if upstream Kconfig behavior drifts.
+enable_external_module_spinlock_exports() {
+  local kconfig_file="${1:-arch/arm64/Kconfig}"
+
+  test -f "$kconfig_file" || {
+    echo "::error::arm64 Kconfig is missing at ${kconfig_file}."
+    return 1
+  }
+
+  sed -i -E \
+    -e 's/^([[:space:]]*)select ARCH_INLINE_SPIN_LOCK[[:space:]]*$/\1# External-module compatibility: keep _raw_spin_lock out of line/' \
+    -e 's/^([[:space:]]*)select ARCH_INLINE_SPIN_UNLOCK[[:space:]]*$/\1select UNINLINE_SPIN_UNLOCK/' \
+    "$kconfig_file"
+
+  if grep -Eq '^[[:space:]]*select ARCH_INLINE_SPIN_(LOCK|UNLOCK)[[:space:]]*$' "$kconfig_file"; then
+    echo "::error::Could not disable the arm64 inline raw spin lock selections."
+    return 1
+  fi
+
+  echo "[+] Kept _raw_spin_lock and _raw_spin_unlock available as exported functions."
+}
+
 # Repair a stable-backport merge regression where key_pass was guarded as if
 # the OpenSSL provider implementation were present, while the older ENGINE
 # implementation still referenced it unconditionally. Keep this deliberately
@@ -206,11 +232,12 @@ enable_ksu_common_configs() {
 
 # Keep the ordinary GKI module ABI while retaining exports needed by external
 # modules loaded after boot. Android production configs may trim exports that
-# have no in-tree consumer; that makes otherwise valid third-party modules fail
-# with "Unknown symbol" for APIs such as _raw_spin_lock and
-# kasan_flag_enabled. MODVERSIONS remains enabled for vendor-module ABI safety,
-# while MODULE_FORCE_LOAD permits purpose-built loaders to accept modules whose
-# version table has deliberately been stripped.
+# have no in-tree consumer, and arm64 normally inlines the plain raw spin lock
+# operations instead of compiling their exported functions. Together those
+# behaviors make otherwise valid third-party modules fail with "Unknown symbol"
+# for APIs such as _raw_spin_lock and kasan_flag_enabled. MODVERSIONS remains
+# enabled for vendor-module ABI safety, while MODULE_FORCE_LOAD permits
+# purpose-built loaders to accept modules whose version table was stripped.
 enable_external_module_compat_configs() {
   local config_file="$1"
 
@@ -219,10 +246,14 @@ enable_external_module_compat_configs() {
     CONFIG_MODULE_UNLOAD \
     CONFIG_MODVERSIONS \
     CONFIG_MODULE_FORCE_LOAD \
+    CONFIG_UNINLINE_SPIN_UNLOCK \
     CONFIG_KASAN \
     CONFIG_KASAN_HW_TAGS
   disable_config_values "$config_file" \
     CONFIG_TRIM_UNUSED_KSYMS \
+    CONFIG_ARCH_INLINE_SPIN_LOCK \
+    CONFIG_ARCH_INLINE_SPIN_UNLOCK \
+    CONFIG_INLINE_SPIN_LOCK \
     CONFIG_KASAN_GENERIC \
     CONFIG_KASAN_SW_TAGS
 }

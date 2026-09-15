@@ -117,6 +117,7 @@ CONFIG_STARTED_AT="$(date +%s)"
 BUILD_PHASE="source integration"
 
 repair_extract_cert_key_pass_guard certs/extract-cert.c
+enable_external_module_spinlock_exports arch/arm64/Kconfig
 install_ksu_variant "${KSU_TYPE}"
 
 if [[ "$KSU_TYPE" == *KPM* ]]; then
@@ -157,9 +158,13 @@ require_config_enabled  out/.config CONFIG_MODULES
 require_config_enabled  out/.config CONFIG_MODULE_UNLOAD
 require_config_enabled  out/.config CONFIG_MODVERSIONS
 require_config_enabled  out/.config CONFIG_MODULE_FORCE_LOAD
+require_config_enabled  out/.config CONFIG_UNINLINE_SPIN_UNLOCK
 require_config_enabled  out/.config CONFIG_KASAN
 require_config_enabled  out/.config CONFIG_KASAN_HW_TAGS
 require_config_disabled out/.config CONFIG_TRIM_UNUSED_KSYMS
+require_config_disabled out/.config CONFIG_ARCH_INLINE_SPIN_LOCK
+require_config_disabled out/.config CONFIG_ARCH_INLINE_SPIN_UNLOCK
+require_config_disabled out/.config CONFIG_INLINE_SPIN_LOCK
 require_config_disabled out/.config CONFIG_KASAN_GENERIC
 require_config_disabled out/.config CONFIG_KASAN_SW_TAGS
 
