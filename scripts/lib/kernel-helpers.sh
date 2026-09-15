@@ -204,8 +204,33 @@ enable_ksu_common_configs() {
   enable_config_values "$config_file" CONFIG_TMPFS_XATTR
 }
 
+# Keep the ordinary GKI module ABI while retaining exports needed by external
+# modules loaded after boot. Android production configs may trim exports that
+# have no in-tree consumer; that makes otherwise valid third-party modules fail
+# with "Unknown symbol" for APIs such as _raw_spin_lock and
+# kasan_flag_enabled. MODVERSIONS remains enabled for vendor-module ABI safety,
+# while MODULE_FORCE_LOAD permits purpose-built loaders to accept modules whose
+# version table has deliberately been stripped.
+enable_external_module_compat_configs() {
+  local config_file="$1"
+
+  enable_config_values "$config_file" \
+    CONFIG_MODULES \
+    CONFIG_MODULE_UNLOAD \
+    CONFIG_MODVERSIONS \
+    CONFIG_MODULE_FORCE_LOAD \
+    CONFIG_KASAN \
+    CONFIG_KASAN_HW_TAGS
+  disable_config_values "$config_file" \
+    CONFIG_TRIM_UNUSED_KSYMS \
+    CONFIG_KASAN_GENERIC \
+    CONFIG_KASAN_SW_TAGS
+}
+
 apply_variant_configs() {
   local config_file="$1"
+
+  enable_external_module_compat_configs "$config_file"
 
   if [[ "$KSU_TYPE" == *susfs* ]]; then
     enable_susfs_configs "$config_file"

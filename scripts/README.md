@@ -24,7 +24,9 @@ Shell implementation used by the GitHub Actions workflows.
   AnyKernel3 properties.
 - `lib/kernel-helpers.sh` edits and verifies Kconfig values and source insertions,
   and repairs the narrowly identified legacy `extract-cert` `key_pass` guard
-  regression without changing provider-aware implementations.
+  regression without changing provider-aware implementations. It also keeps
+  module versioning while disabling unused-export trimming for external-driver
+  compatibility.
 - `lib/ksu-setup.sh` checks out the selected KernelSU-compatible implementation
   at the exact resolved commit and connects it to the kernel driver tree.
 - `lib/susfs-apply.sh` applies SUSFS at an exact commit, repairs explicitly
@@ -39,7 +41,7 @@ Shell implementation used by the GitHub Actions workflows.
   Kconfig/Makefile only for the explicit experimental preset.
 - `lib/verify.sh` performs source, config, hook-mode, and binary verification,
   including an LTO-aware `llvm-nm` check of the compiled KPM resolver and
-  dedicated KPM, SUSFS, and NoMount proofs.
+  dedicated KPM, SUSFS, NoMount, and external-module export proofs.
 
 ## Tests
 

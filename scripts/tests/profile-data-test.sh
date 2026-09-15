@@ -233,10 +233,11 @@ assert_eq "16" "$SUPPORTED_ANDROID_VERSIONS" "Android 16 development detection"
 ANYKERNEL_FIXTURE="$(mktemp)"
 UPDATE_BINARY_FIXTURE="$(mktemp)"
 KPM_CONFIG_FIXTURE="$(mktemp)"
+MODULE_CONFIG_FIXTURE="$(mktemp)"
 KPM_VERIFY_FIXTURE="$(mktemp -d)"
 NOMOUNT_FIXTURE_DIR="$(mktemp -d)"
 EXTRACT_CERT_FIXTURE_DIR="$(mktemp -d)"
-trap 'rm -f "$ANYKERNEL_FIXTURE" "$UPDATE_BINARY_FIXTURE" "$KPM_CONFIG_FIXTURE"; rm -rf "$KPM_VERIFY_FIXTURE" "$NOMOUNT_FIXTURE_DIR" "$EXTRACT_CERT_FIXTURE_DIR"' EXIT
+trap 'rm -f "$ANYKERNEL_FIXTURE" "$UPDATE_BINARY_FIXTURE" "$KPM_CONFIG_FIXTURE" "$MODULE_CONFIG_FIXTURE"; rm -rf "$KPM_VERIFY_FIXTURE" "$NOMOUNT_FIXTURE_DIR" "$EXTRACT_CERT_FIXTURE_DIR"' EXIT
 
 cat > "$EXTRACT_CERT_FIXTURE_DIR/extract-cert.c" <<'EOF'
 #include <openssl/engine.h>
@@ -289,6 +290,20 @@ mkdir -p \
   "$KPM_VERIFY_FIXTURE/toolchain"
 : > "$KPM_VERIFY_FIXTURE/out/drivers/kernelsu/infra/symbol_resolver.o"
 printf '%s\n' '0000000000001000 T sukisu_handle_kpm' > "$KPM_VERIFY_FIXTURE/out/System.map"
+printf '%s\n' \
+  $'0x00000001\t_raw_spin_lock\tvmlinux\tEXPORT_SYMBOL' \
+  $'0x00000002\t_raw_spin_unlock\tvmlinux\tEXPORT_SYMBOL' \
+  $'0x00000003\tkasan_flag_enabled\tvmlinux\tEXPORT_SYMBOL' \
+  > "$KPM_VERIFY_FIXTURE/out/Module.symvers"
+printf '%s\n' \
+  'CONFIG_MODULES=y' \
+  'CONFIG_MODULE_UNLOAD=y' \
+  'CONFIG_MODVERSIONS=y' \
+  'CONFIG_MODULE_FORCE_LOAD=y' \
+  'CONFIG_KASAN=y' \
+  'CONFIG_KASAN_HW_TAGS=y' \
+  '# CONFIG_TRIM_UNUSED_KSYMS is not set' \
+  > "$KPM_VERIFY_FIXTURE/out/.config"
 cat > "$KPM_VERIFY_FIXTURE/toolchain/llvm-nm" <<'EOF'
 #!/usr/bin/env bash
 [[ "${*: -1}" == */infra/symbol_resolver.o ]] || exit 1
@@ -299,11 +314,15 @@ chmod +x "$KPM_VERIFY_FIXTURE/toolchain/llvm-nm"
   cd "$KPM_VERIFY_FIXTURE"
   export KSU_DRIVER_DIR=drivers
   export CLANG_ROOT="$KPM_VERIFY_FIXTURE/toolchain"
+  export KERNEL_BRANCH=test-branch
   export KERNEL_COMMIT=test-kernel
   export KSU_COMMIT=test-sukisu
   verify_kpm_binary_presence >/dev/null
   grep -Fq 'T find_kernel_symbol_exact' kpm-proof.txt \
     || fail "KPM proof does not record the leaf resolver definition"
+  verify_external_module_exports >/dev/null
+  grep -Fq 'kasan_flag_enabled' external-module-proof.txt \
+    || fail "external module proof does not record the required exports"
 )
 
 KSU_TYPE="SukiSU-Ultra-with-susfs-nomount-KPM"
@@ -316,6 +335,38 @@ grep -q '^CONFIG_KSU_SUSFS_SUS_MAP=y$' "$KPM_CONFIG_FIXTURE" || fail "combined p
 grep -q '^CONFIG_KSU_SUSFS_OPEN_REDIRECT=y$' "$KPM_CONFIG_FIXTURE" || fail "combined preset SUSFS redirect config"
 grep -q '^CONFIG_KEYS=y$' "$KPM_CONFIG_FIXTURE" || fail "combined preset NoMount key config"
 grep -q '^CONFIG_NOMOUNT=y$' "$KPM_CONFIG_FIXTURE" || fail "combined preset NoMount config"
+
+cat > "$MODULE_CONFIG_FIXTURE" <<'EOF'
+CONFIG_MODULES=y
+# CONFIG_MODULE_UNLOAD is not set
+# CONFIG_MODVERSIONS is not set
+# CONFIG_MODULE_FORCE_LOAD is not set
+CONFIG_TRIM_UNUSED_KSYMS=y
+# CONFIG_KASAN is not set
+CONFIG_KASAN_GENERIC=y
+CONFIG_KASAN_SW_TAGS=y
+# CONFIG_KASAN_HW_TAGS is not set
+EOF
+KSU_TYPE="None"
+apply_variant_configs "$MODULE_CONFIG_FIXTURE"
+for module_config in \
+  CONFIG_MODULES \
+  CONFIG_MODULE_UNLOAD \
+  CONFIG_MODVERSIONS \
+  CONFIG_MODULE_FORCE_LOAD \
+  CONFIG_KASAN \
+  CONFIG_KASAN_HW_TAGS; do
+  grep -q "^${module_config}=y$" "$MODULE_CONFIG_FIXTURE" \
+    || fail "external module compatibility config ${module_config}"
+done
+grep -q '^# CONFIG_TRIM_UNUSED_KSYMS is not set$' "$MODULE_CONFIG_FIXTURE" \
+  || fail "external module exports must not be trimmed"
+grep -q '^# CONFIG_KASAN_GENERIC is not set$' "$MODULE_CONFIG_FIXTURE" \
+  || fail "generic KASAN must not override hardware-tag KASAN"
+grep -q '^# CONFIG_KASAN_SW_TAGS is not set$' "$MODULE_CONFIG_FIXTURE" \
+  || fail "software-tag KASAN must not override hardware-tag KASAN"
+grep -Fq 'verify_external_module_exports' "$COMPILE_SCRIPT" \
+  || fail "full builds do not verify external module exports"
 
 printf '%s\n' \
   'kernel.string=placeholder' \

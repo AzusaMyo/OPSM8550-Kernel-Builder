@@ -153,6 +153,16 @@ make "${MAKE_ARGS[@]}" gki_defconfig "${ACTIVE_CONFIG_ARRAY[@]}"
 apply_variant_configs out/.config
 make "${MAKE_ARGS[@]}" olddefconfig
 
+require_config_enabled  out/.config CONFIG_MODULES
+require_config_enabled  out/.config CONFIG_MODULE_UNLOAD
+require_config_enabled  out/.config CONFIG_MODVERSIONS
+require_config_enabled  out/.config CONFIG_MODULE_FORCE_LOAD
+require_config_enabled  out/.config CONFIG_KASAN
+require_config_enabled  out/.config CONFIG_KASAN_HW_TAGS
+require_config_disabled out/.config CONFIG_TRIM_UNUSED_KSYMS
+require_config_disabled out/.config CONFIG_KASAN_GENERIC
+require_config_disabled out/.config CONFIG_KASAN_SW_TAGS
+
 if [[ "$KSU_TYPE" != "None" ]]; then
   require_config_enabled out/.config CONFIG_KSU
 fi
@@ -248,6 +258,7 @@ fi
 COMPILE_SECONDS=$(($(date +%s) - COMPILE_STARTED_AT))
 
 BUILD_PHASE="post-build verification"
+verify_external_module_exports
 if [[ "$KSU_TYPE" == *susfs* ]]; then
   echo "==== SUSFS CONFIG SNAPSHOT ===="
   grep -E '^CONFIG_KSU_SUSFS|^CONFIG_KSU_MANUAL_HOOK|^CONFIG_TMPFS_XATTR=|^CONFIG_NOMOUNT=' out/.config || true
