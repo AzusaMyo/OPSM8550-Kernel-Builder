@@ -98,8 +98,10 @@ grep -Fq 'sanitize_cached_anykernel_checkout AnyKernel3' "$ANYKERNEL_PACKAGE_SCR
   || fail "AnyKernel packaging must sanitize a restored checkout"
 grep -Fq 'install_anykernel_template "$ANYKERNEL_TEMPLATE" "$ANYKERNEL_SCRIPT"' "$ANYKERNEL_PACKAGE_SCRIPT" \
   || fail "AnyKernel packaging must install the device-specific flash template"
-grep -Fq 'patch_anykernel_app_flash_staging "$ANYKERNEL_UPDATE_BINARY"' "$ANYKERNEL_PACKAGE_SCRIPT" \
-  || fail "AnyKernel packaging must move app-triggered flashes out of non-executable app data"
+grep -Fq 'install_anykernel_arm64_busybox "$KSU_ARM64_BUSYBOX" "AnyKernel3/tools/busybox"' "$ANYKERNEL_PACKAGE_SCRIPT" \
+  || fail "KPM packaging must replace AnyKernel's legacy ARM BusyBox"
+grep -Fq 'add_anykernel_preflight_diagnostics "$ANYKERNEL_UPDATE_BINARY" "$ANYKERNEL_BUSYBOX_ABI"' "$ANYKERNEL_PACKAGE_SCRIPT" \
+  || fail "AnyKernel packaging must report the device and BusyBox ABIs"
 grep -Fq 'git checkout -q --force --detach FETCH_HEAD' "$ANYKERNEL_PACKAGE_SCRIPT" \
   || fail "AnyKernel packaging must force the pinned detached checkout"
 if grep -Fq 'Kernel-SU/AnyKernel3.git' "$RESOLVER_SCRIPT"; then
@@ -626,7 +628,9 @@ test -z "$(git -C "$ANYKERNEL_CACHE_FIXTURE_DIR" status --porcelain)" \
 
 mkdir -p \
   "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source/META-INF/com/google/android" \
+  "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source/tools" \
   "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/sm8550/out/arch/arm64/boot" \
+  "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/sm8550/SukiSU-Ultra/userspace/ksud/bin/aarch64" \
   "$ANYKERNEL_PACKAGE_FIXTURE_DIR/bin"
 printf '%s\n' \
   'kernel.string=placeholder' \
@@ -645,9 +649,11 @@ printf '%s\n' \
   '  fi;' \
   'setup_bb;' \
   > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source/META-INF/com/google/android/update-binary"
+printf '%s\n' upstream-arm-busybox > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source/tools/busybox"
 chmod 755 \
   "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source/anykernel.sh" \
-  "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source/META-INF/com/google/android/update-binary"
+  "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source/META-INF/com/google/android/update-binary" \
+  "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source/tools/busybox"
 git -C "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source" init -q
 git -C "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source" config user.name fixture
 git -C "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source" config user.email fixture@example.invalid
@@ -658,6 +664,7 @@ git clone -q "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source" "$ANYKERNEL_PACKAGE_FIXTURE
 printf '%s\n' 'kernel.string=dirty-cache' > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/anykernel.sh"
 printf '%s\n' stale > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/Image"
 printf '%s\n' image > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/sm8550/out/arch/arm64/boot/Image"
+printf '%s\n' sukisu-arm64-busybox > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/sm8550/SukiSU-Ultra/userspace/ksud/bin/aarch64/busybox"
 cat > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/bin/jq" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' '{}'
@@ -666,7 +673,16 @@ cat > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/bin/zip" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' zip-fixture > "$2"
 EOF
-chmod +x "$ANYKERNEL_PACKAGE_FIXTURE_DIR/bin/jq" "$ANYKERNEL_PACKAGE_FIXTURE_DIR/bin/zip"
+cat > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/bin/readelf" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' '  Class:                             ELF64'
+printf '%s\n' '  Machine:                           AArch64'
+EOF
+chmod +x \
+  "$ANYKERNEL_PACKAGE_FIXTURE_DIR/bin/jq" \
+  "$ANYKERNEL_PACKAGE_FIXTURE_DIR/bin/zip" \
+  "$ANYKERNEL_PACKAGE_FIXTURE_DIR/bin/readelf" \
+  "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/sm8550/SukiSU-Ultra/userspace/ksud/bin/aarch64/busybox"
 
 for package_timestamp in 20260101_000000 20260101_000001; do
   (
@@ -684,7 +700,8 @@ for package_timestamp in 20260101_000000 20260101_000001; do
     KERNEL_COMMIT=1111111111111111111111111111111111111111 \
     MODULES_COMMIT=2222222222222222222222222222222222222222 \
     CLANG_VERSION=test-clang \
-    KSU_TYPE=KernelSU-Next-with-susfs \
+    KSU_TYPE=SukiSU-Ultra-with-susfs-nomount-KPM \
+    KSU_REPO=https://github.com/SukiSU-Ultra/SukiSU-Ultra.git \
     KSU_COMMIT=3333333333333333333333333333333333333333 \
     SUSFS_REF=test \
     SUSFS_COMMIT=4444444444444444444444444444444444444444 \
@@ -697,24 +714,33 @@ for package_timestamp in 20260101_000000 20260101_000001; do
     ANYKERNEL_COMMIT="$ANYKERNEL_PACKAGE_COMMIT" \
     bash "$ANYKERNEL_PACKAGE_SCRIPT" >/dev/null
   )
-  test -s "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/release-assets/test-profile_KernelSU-Next-with-susfs_111111111111_${package_timestamp}.zip" \
+  test -s "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/release-assets/test-profile_SukiSU-Ultra-with-susfs-nomount-KPM_111111111111_${package_timestamp}.zip" \
     || fail "AnyKernel packaging did not produce the flashable archive"
   test -s "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/release-assets/SHA256SUMS" \
     || fail "AnyKernel packaging did not produce checksums"
-  grep -Fq 'export AKHOME=/data/local/tmp/anykernel-$$;' \
+  assert_eq "sukisu-arm64-busybox" \
+    "$(cat "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/tools/busybox")" \
+    "KPM AnyKernel arm64 BusyBox replacement"
+  assert_eq "755" \
+    "$(stat -c '%a' "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/tools/busybox")" \
+    "KPM AnyKernel arm64 BusyBox permissions"
+  grep -Fq '[ "$AKHOME" ] || export AKHOME=$POSTINSTALL/tmp/anykernel;' \
     "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/META-INF/com/google/android/update-binary" \
-    || fail "AnyKernel package does not use executable staging for app-triggered flashes"
+    || fail "AnyKernel package changed upstream work-directory handling"
   grep -Fq 'AnyKernel work directory: $AKHOME' \
     "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/META-INF/com/google/android/update-binary" \
     || fail "AnyKernel package does not report its effective staging directory"
+  grep -Fq 'Bundled BusyBox ABI: arm64' \
+    "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/META-INF/com/google/android/update-binary" \
+    || fail "KPM AnyKernel package does not report its arm64 BusyBox"
   sh -n "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/META-INF/com/google/android/update-binary" \
-    || fail "AnyKernel app-flasher compatibility produced invalid shell syntax"
-  APP_FLASH_UPDATER_HASH="$(sha256sum "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/META-INF/com/google/android/update-binary" | cut -d' ' -f1)"
-  patch_anykernel_app_flash_staging \
-    "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/META-INF/com/google/android/update-binary"
-  assert_eq "$APP_FLASH_UPDATER_HASH" \
+    || fail "AnyKernel preflight diagnostics produced invalid shell syntax"
+  PREFLIGHT_UPDATER_HASH="$(sha256sum "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/META-INF/com/google/android/update-binary" | cut -d' ' -f1)"
+  add_anykernel_preflight_diagnostics \
+    "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/META-INF/com/google/android/update-binary" arm64
+  assert_eq "$PREFLIGHT_UPDATER_HASH" \
     "$(sha256sum "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/META-INF/com/google/android/update-binary" | cut -d' ' -f1)" \
-    "AnyKernel app-flasher staging repair idempotence"
+    "AnyKernel preflight diagnostics idempotence"
 done
 
 for i in "${!profiles[@]}"; do

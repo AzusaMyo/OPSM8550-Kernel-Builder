@@ -164,50 +164,65 @@ add_anykernel_devicecheck_diagnostics() {
   grep -Fq 'ro.product.device=$device' "$file"
 }
 
-patch_anykernel_app_flash_staging() {
+install_anykernel_arm64_busybox() {
+  local source="$1"
+  local destination="$2"
+  local elf_header
+
+  test -s "$source" || {
+    echo "::error::The KernelSU arm64 BusyBox is missing: $source"
+    return 1
+  }
+
+  elf_header="$(readelf -h "$source")" || {
+    echo "::error::Could not inspect the KernelSU BusyBox: $source"
+    return 1
+  }
+  grep -Eq 'Class:[[:space:]]+ELF64' <<< "$elf_header" || {
+    echo "::error::KernelSU BusyBox is not a 64-bit ELF: $source"
+    return 1
+  }
+  grep -Eq 'Machine:[[:space:]]+AArch64' <<< "$elf_header" || {
+    echo "::error::KernelSU BusyBox is not built for AArch64: $source"
+    return 1
+  }
+
+  install -m 0755 "$source" "$destination"
+  test -x "$destination"
+}
+
+add_anykernel_preflight_diagnostics() {
   local file="$1"
+  local busybox_abi="$2"
   local tmp_file
-  local akhome_line='[ "$AKHOME" ] || export AKHOME=$POSTINSTALL/tmp/anykernel;'
   local setup_line='setup_bb;'
 
-  if grep -Fq 'export AKHOME=/data/local/tmp/anykernel-$$;' "$file" && \
-     grep -Fq 'AnyKernel work directory: $AKHOME' "$file"; then
+  if grep -Fq 'AnyKernel work directory: $AKHOME' "$file" && \
+     grep -Fq "Bundled BusyBox ABI: $busybox_abi" "$file"; then
     return 0
   fi
 
   tmp_file="$(mktemp)"
-  awk -v akhome_line="$akhome_line" -v setup_line="$setup_line" '
-    $0 == akhome_line {
-      print "case \"$POSTINSTALL\" in"
-      print "  /data/user/*|/data/data/*)"
-      print "    # App-private data carries a non-executable SELinux label."
-      print "    # Stage AnyKernel tools in the executable Android shell temp area."
-      print "    export AKHOME=/data/local/tmp/anykernel-$$;"
-      print "    ;;"
-      print "  *)"
-      print "    [ \"$AKHOME\" ] || export AKHOME=$POSTINSTALL/tmp/anykernel;"
-      print "    ;;"
-      print "esac;"
-      staged = 1
-      next
-    }
+  awk -v setup_line="$setup_line" -v busybox_abi="$busybox_abi" '
     $0 == setup_line {
       print "ui_print \"AnyKernel work directory: $AKHOME\";"
+      print "ui_print \"Device primary ABI: $(getprop ro.product.cpu.abi 2>/dev/null)\";"
+      print "ui_print \"Bundled BusyBox ABI: " busybox_abi "\";"
       print
       diagnosed = 1
       next
     }
     { print }
     END {
-      if (!staged || !diagnosed) exit 1
+      if (!diagnosed) exit 1
     }
   ' "$file" > "$tmp_file" || {
     rm -f "$tmp_file"
-    echo "::error::Could not add Android app-flasher staging compatibility to $file"
+    echo "::error::Could not add AnyKernel preflight diagnostics to $file"
     return 1
   }
 
   replace_file_preserving_mode "$tmp_file" "$file"
-  grep -Fq 'export AKHOME=/data/local/tmp/anykernel-$$;' "$file"
   grep -Fq 'AnyKernel work directory: $AKHOME' "$file"
+  grep -Fq "Bundled BusyBox ABI: $busybox_abi" "$file"
 }

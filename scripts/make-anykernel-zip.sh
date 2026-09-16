@@ -88,6 +88,8 @@ test "$(git -C AnyKernel3 rev-parse HEAD)" = "$ANYKERNEL_COMMIT"
 ANYKERNEL_SCRIPT="AnyKernel3/anykernel.sh"
 ANYKERNEL_UPDATE_BINARY="AnyKernel3/META-INF/com/google/android/update-binary"
 ANYKERNEL_TEMPLATE="${SCRIPT_DIR}/templates/anykernel.sh"
+ANYKERNEL_BUSYBOX_ABI="arm"
+ANYKERNEL_BUSYBOX_SHA256=""
 install_anykernel_template "$ANYKERNEL_TEMPLATE" "$ANYKERNEL_SCRIPT"
 configure_anykernel_properties \
   "$ANYKERNEL_SCRIPT" \
@@ -95,7 +97,15 @@ configure_anykernel_properties \
   "$DEVICE_NAMES" \
   "$SUPPORTED_ANDROID_VERSIONS"
 add_anykernel_devicecheck_diagnostics "$ANYKERNEL_UPDATE_BINARY"
-patch_anykernel_app_flash_staging "$ANYKERNEL_UPDATE_BINARY"
+
+if [[ "$KPM_ENABLED" == true ]]; then
+  KSU_CHECKOUT_NAME="$(basename "${KSU_REPO%.git}")"
+  KSU_ARM64_BUSYBOX="${SOC}/${KSU_CHECKOUT_NAME}/userspace/ksud/bin/aarch64/busybox"
+  install_anykernel_arm64_busybox "$KSU_ARM64_BUSYBOX" "AnyKernel3/tools/busybox"
+  ANYKERNEL_BUSYBOX_ABI="arm64"
+fi
+ANYKERNEL_BUSYBOX_SHA256="$(sha256sum AnyKernel3/tools/busybox | awk '{print $1}')"
+add_anykernel_preflight_diagnostics "$ANYKERNEL_UPDATE_BINARY" "$ANYKERNEL_BUSYBOX_ABI"
 
 rm -rf "$ASSET_DIR"
 mkdir -p "$ASSET_DIR"
@@ -129,6 +139,8 @@ jq -n \
   --arg zeromount_gki_tag "$ZEROMOUNT_GKI_TAG" \
   --arg zeromount_patch_sha256 "$ZEROMOUNT_PATCH_SHA256" \
   --arg anykernel_commit "$ANYKERNEL_COMMIT" \
+  --arg anykernel_busybox_abi "$ANYKERNEL_BUSYBOX_ABI" \
+  --arg anykernel_busybox_sha256 "$ANYKERNEL_BUSYBOX_SHA256" \
   --arg builder_commit "$GITHUB_SHA" \
   --arg run_url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
   --arg built_at "$BUILD_TIMESTAMP" \
@@ -161,6 +173,8 @@ jq -n \
     zeromount_gki_tag: $zeromount_gki_tag,
     zeromount_patch_sha256: $zeromount_patch_sha256,
     anykernel_commit: $anykernel_commit,
+    anykernel_busybox_abi: $anykernel_busybox_abi,
+    anykernel_busybox_sha256: $anykernel_busybox_sha256,
     builder_commit: $builder_commit,
     workflow_run: $run_url,
     built_at_utc: $built_at
@@ -209,6 +223,7 @@ cat > "$ASSET_DIR/release-notes.md" <<EOF_NOTES
 - SUSFS: ${SUSFS_NOTE}
 - NoMount: ${NOMOUNT_NOTE}
 - ZeroMount: ${ZEROMOUNT_NOTE}
+- AnyKernel BusyBox: ${ANYKERNEL_BUSYBOX_ABI} (sha256:${ANYKERNEL_BUSYBOX_SHA256})
 
 The flashable ZIP performs a device-codename check before modifying the boot partition.
 Only flash it on the listed target devices, and keep a known-good stock boot image available.
