@@ -186,11 +186,13 @@ Android version checking is also enabled when the selected branch identifies a
 known Android generation. The installer targets the slot-aware `boot` partition
 by name and preserves the existing ramdisk while replacing only the kernel
 Image; upstream AnyKernel example-device paths and demo ramdisk edits are not
-included. KPM packages replace AnyKernel's legacy 32-bit ARM BusyBox with the
-64-bit AArch64 BusyBox from the exact SukiSU source revision used by the build.
-This is required on arm64-only SoCs such as the Snapdragon 8 Gen 3 in OnePlus
-12. The installer logs both the device ABI and packaged BusyBox ABI before
-initializing its tools.
+included. KPM packages replace AnyKernel's legacy 32-bit ARM BusyBox and
+MagiskBoot with verified AArch64 builds. BusyBox comes from the exact SukiSU
+source revision used by the build; MagiskBoot comes from a pinned official
+Magisk APK with both archive and extracted-binary SHA-256 verification. On
+arm64-only SoCs such as the Snapdragon 8 Gen 3 in OnePlus 12, the installer
+also discards the manager app's incompatible ARM32 `mkbootfs` injection and
+uses BusyBox `cpio` instead.
 
 Each full build produces `release-assets/` containing:
 

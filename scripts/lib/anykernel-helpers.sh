@@ -164,26 +164,27 @@ add_anykernel_devicecheck_diagnostics() {
   grep -Fq 'ro.product.device=$device' "$file"
 }
 
-install_anykernel_arm64_busybox() {
+install_anykernel_arm64_binary() {
   local source="$1"
   local destination="$2"
+  local label="$3"
   local elf_header
 
   test -s "$source" || {
-    echo "::error::The KernelSU arm64 BusyBox is missing: $source"
+    echo "::error::The arm64 $label is missing: $source"
     return 1
   }
 
   elf_header="$(readelf -h "$source")" || {
-    echo "::error::Could not inspect the KernelSU BusyBox: $source"
+    echo "::error::Could not inspect the arm64 $label: $source"
     return 1
   }
   grep -Eq 'Class:[[:space:]]+ELF64' <<< "$elf_header" || {
-    echo "::error::KernelSU BusyBox is not a 64-bit ELF: $source"
+    echo "::error::$label is not a 64-bit ELF: $source"
     return 1
   }
   grep -Eq 'Machine:[[:space:]]+AArch64' <<< "$elf_header" || {
-    echo "::error::KernelSU BusyBox is not built for AArch64: $source"
+    echo "::error::$label is not built for AArch64: $source"
     return 1
   }
 
@@ -191,30 +192,86 @@ install_anykernel_arm64_busybox() {
   test -x "$destination"
 }
 
+install_anykernel_arm64_busybox() {
+  install_anykernel_arm64_binary "$1" "$2" BusyBox
+}
+
+install_anykernel_arm64_magiskboot() {
+  local apk_url="$1"
+  local expected_apk_sha256="$2"
+  local expected_magiskboot_sha256="$3"
+  local destination="$4"
+  local local_apk="${5:-}"
+
+  (
+    set -e
+    local temp_dir
+    local apk_file
+    local magiskboot_file
+
+    temp_dir="$(mktemp -d)"
+    trap 'rm -rf "$temp_dir"' EXIT
+    apk_file="$temp_dir/Magisk.apk"
+    magiskboot_file="$temp_dir/magiskboot"
+
+    if [[ -n "$local_apk" ]]; then
+      cp "$local_apk" "$apk_file"
+    else
+      curl --retry 5 --retry-delay 3 --retry-all-errors -fL "$apk_url" -o "$apk_file"
+    fi
+    printf '%s  %s\n' "$expected_apk_sha256" "$apk_file" | sha256sum --check --status || {
+      echo "::error::Magisk APK checksum verification failed."
+      return 1
+    }
+    unzip -p "$apk_file" lib/arm64-v8a/libmagiskboot.so > "$magiskboot_file"
+    printf '%s  %s\n' "$expected_magiskboot_sha256" "$magiskboot_file" | sha256sum --check --status || {
+      echo "::error::arm64 MagiskBoot checksum verification failed."
+      return 1
+    }
+    install_anykernel_arm64_binary "$magiskboot_file" "$destination" MagiskBoot
+  )
+}
+
 add_anykernel_preflight_diagnostics() {
   local file="$1"
   local busybox_abi="$2"
+  local remove_injected_mkbootfs="${3:-false}"
   local tmp_file
   local setup_line='setup_bb;'
+  local path_line='OLD_PATH="$PATH";'
 
   if grep -Fq 'AnyKernel work directory: $AKHOME' "$file" && \
-     grep -Fq "Bundled BusyBox ABI: $busybox_abi" "$file"; then
+     grep -Fq "Bundled BusyBox ABI: $busybox_abi" "$file" && \
+     grep -Fq "Bundled MagiskBoot ABI: $busybox_abi" "$file" && \
+     { [[ "$remove_injected_mkbootfs" != true ]] || grep -Fq 'Removing incompatible app-injected mkbootfs' "$file"; }; then
     return 0
   fi
 
   tmp_file="$(mktemp)"
-  awk -v setup_line="$setup_line" -v busybox_abi="$busybox_abi" '
+  awk \
+    -v setup_line="$setup_line" \
+    -v path_line="$path_line" \
+    -v busybox_abi="$busybox_abi" \
+    -v remove_injected_mkbootfs="$remove_injected_mkbootfs" '
     $0 == setup_line {
       print "ui_print \"AnyKernel work directory: $AKHOME\";"
       print "ui_print \"Device primary ABI: $(getprop ro.product.cpu.abi 2>/dev/null)\";"
       print "ui_print \"Bundled BusyBox ABI: " busybox_abi "\";"
+      print "ui_print \"Bundled MagiskBoot ABI: " busybox_abi "\";"
       print
       diagnosed = 1
       next
     }
+    $0 == path_line && remove_injected_mkbootfs == "true" {
+      print "if [ -f \"$AKHOME/tools/mkbootfs\" ]; then"
+      print "  ui_print \"Removing incompatible app-injected mkbootfs\";"
+      print "  \"$AKHOME/tools/busybox\" rm -f \"$AKHOME/tools/mkbootfs\";"
+      print "fi;"
+      removed = 1
+    }
     { print }
     END {
-      if (!diagnosed) exit 1
+      if (!diagnosed || (remove_injected_mkbootfs == "true" && !removed)) exit 1
     }
   ' "$file" > "$tmp_file" || {
     rm -f "$tmp_file"
@@ -225,4 +282,7 @@ add_anykernel_preflight_diagnostics() {
   replace_file_preserving_mode "$tmp_file" "$file"
   grep -Fq 'AnyKernel work directory: $AKHOME' "$file"
   grep -Fq "Bundled BusyBox ABI: $busybox_abi" "$file"
+  grep -Fq "Bundled MagiskBoot ABI: $busybox_abi" "$file"
+  [[ "$remove_injected_mkbootfs" != true ]] || \
+    grep -Fq 'Removing incompatible app-injected mkbootfs' "$file"
 }

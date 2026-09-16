@@ -100,7 +100,9 @@ grep -Fq 'install_anykernel_template "$ANYKERNEL_TEMPLATE" "$ANYKERNEL_SCRIPT"' 
   || fail "AnyKernel packaging must install the device-specific flash template"
 grep -Fq 'install_anykernel_arm64_busybox "$KSU_ARM64_BUSYBOX" "AnyKernel3/tools/busybox"' "$ANYKERNEL_PACKAGE_SCRIPT" \
   || fail "KPM packaging must replace AnyKernel's legacy ARM BusyBox"
-grep -Fq 'add_anykernel_preflight_diagnostics "$ANYKERNEL_UPDATE_BINARY" "$ANYKERNEL_BUSYBOX_ABI"' "$ANYKERNEL_PACKAGE_SCRIPT" \
+grep -Fq 'install_anykernel_arm64_magiskboot \' "$ANYKERNEL_PACKAGE_SCRIPT" \
+  || fail "KPM packaging must replace AnyKernel's legacy ARM MagiskBoot"
+grep -Fq 'add_anykernel_preflight_diagnostics \' "$ANYKERNEL_PACKAGE_SCRIPT" \
   || fail "AnyKernel packaging must report the device and BusyBox ABIs"
 grep -Fq 'git checkout -q --force --detach FETCH_HEAD' "$ANYKERNEL_PACKAGE_SCRIPT" \
   || fail "AnyKernel packaging must force the pinned detached checkout"
@@ -629,6 +631,7 @@ test -z "$(git -C "$ANYKERNEL_CACHE_FIXTURE_DIR" status --porcelain)" \
 mkdir -p \
   "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source/META-INF/com/google/android" \
   "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source/tools" \
+  "$ANYKERNEL_PACKAGE_FIXTURE_DIR/magisk-apk/lib/arm64-v8a" \
   "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/sm8550/out/arch/arm64/boot" \
   "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/sm8550/SukiSU-Ultra/userspace/ksud/bin/aarch64" \
   "$ANYKERNEL_PACKAGE_FIXTURE_DIR/bin"
@@ -648,12 +651,16 @@ printf '%s\n' \
   '    abort " " "Unsupported device. Aborting...";' \
   '  fi;' \
   'setup_bb;' \
+  'if [ $? != 0 ]; then exit 1; fi;' \
+  'OLD_PATH="$PATH";' \
   > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source/META-INF/com/google/android/update-binary"
 printf '%s\n' upstream-arm-busybox > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source/tools/busybox"
+printf '%s\n' upstream-arm-magiskboot > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source/tools/magiskboot"
 chmod 755 \
   "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source/anykernel.sh" \
   "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source/META-INF/com/google/android/update-binary" \
-  "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source/tools/busybox"
+  "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source/tools/busybox" \
+  "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source/tools/magiskboot"
 git -C "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source" init -q
 git -C "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source" config user.name fixture
 git -C "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source" config user.email fixture@example.invalid
@@ -665,6 +672,11 @@ printf '%s\n' 'kernel.string=dirty-cache' > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work
 printf '%s\n' stale > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/Image"
 printf '%s\n' image > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/sm8550/out/arch/arm64/boot/Image"
 printf '%s\n' sukisu-arm64-busybox > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/sm8550/SukiSU-Ultra/userspace/ksud/bin/aarch64/busybox"
+printf '%s\n' magisk-arm64-magiskboot > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/magisk-apk/lib/arm64-v8a/libmagiskboot.so"
+(
+  cd "$ANYKERNEL_PACKAGE_FIXTURE_DIR/magisk-apk"
+  zip -q "$ANYKERNEL_PACKAGE_FIXTURE_DIR/Magisk.apk" lib/arm64-v8a/libmagiskboot.so
+)
 cat > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/bin/jq" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' '{}'
@@ -710,6 +722,9 @@ for package_timestamp in 20260101_000000 20260101_000001; do
     GITHUB_WORKSPACE="$ANYKERNEL_PACKAGE_FIXTURE_DIR/work" \
     GITHUB_ENV="$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/github-env" \
     GITHUB_OUTPUT="$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/github-output" \
+    MAGISK_APK_PATH="$ANYKERNEL_PACKAGE_FIXTURE_DIR/Magisk.apk" \
+    MAGISK_APK_SHA256="$(sha256sum "$ANYKERNEL_PACKAGE_FIXTURE_DIR/Magisk.apk" | cut -d' ' -f1)" \
+    MAGISKBOOT_ARM64_SHA256="$(sha256sum "$ANYKERNEL_PACKAGE_FIXTURE_DIR/magisk-apk/lib/arm64-v8a/libmagiskboot.so" | cut -d' ' -f1)" \
     ANYKERNEL_REPO="$ANYKERNEL_PACKAGE_FIXTURE_DIR/source" \
     ANYKERNEL_COMMIT="$ANYKERNEL_PACKAGE_COMMIT" \
     bash "$ANYKERNEL_PACKAGE_SCRIPT" >/dev/null
@@ -724,6 +739,12 @@ for package_timestamp in 20260101_000000 20260101_000001; do
   assert_eq "755" \
     "$(stat -c '%a' "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/tools/busybox")" \
     "KPM AnyKernel arm64 BusyBox permissions"
+  assert_eq "magisk-arm64-magiskboot" \
+    "$(cat "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/tools/magiskboot")" \
+    "KPM AnyKernel arm64 MagiskBoot replacement"
+  assert_eq "755" \
+    "$(stat -c '%a' "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/tools/magiskboot")" \
+    "KPM AnyKernel arm64 MagiskBoot permissions"
   grep -Fq '[ "$AKHOME" ] || export AKHOME=$POSTINSTALL/tmp/anykernel;' \
     "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/META-INF/com/google/android/update-binary" \
     || fail "AnyKernel package changed upstream work-directory handling"
@@ -733,11 +754,17 @@ for package_timestamp in 20260101_000000 20260101_000001; do
   grep -Fq 'Bundled BusyBox ABI: arm64' \
     "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/META-INF/com/google/android/update-binary" \
     || fail "KPM AnyKernel package does not report its arm64 BusyBox"
+  grep -Fq 'Bundled MagiskBoot ABI: arm64' \
+    "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/META-INF/com/google/android/update-binary" \
+    || fail "KPM AnyKernel package does not report its arm64 MagiskBoot"
+  grep -Fq 'Removing incompatible app-injected mkbootfs' \
+    "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/META-INF/com/google/android/update-binary" \
+    || fail "KPM AnyKernel package does not remove the manager's ARM32 mkbootfs"
   sh -n "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/META-INF/com/google/android/update-binary" \
     || fail "AnyKernel preflight diagnostics produced invalid shell syntax"
   PREFLIGHT_UPDATER_HASH="$(sha256sum "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/META-INF/com/google/android/update-binary" | cut -d' ' -f1)"
   add_anykernel_preflight_diagnostics \
-    "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/META-INF/com/google/android/update-binary" arm64
+    "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/META-INF/com/google/android/update-binary" arm64 true
   assert_eq "$PREFLIGHT_UPDATER_HASH" \
     "$(sha256sum "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/META-INF/com/google/android/update-binary" | cut -d' ' -f1)" \
     "AnyKernel preflight diagnostics idempotence"
