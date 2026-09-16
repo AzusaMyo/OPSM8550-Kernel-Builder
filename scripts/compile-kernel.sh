@@ -15,6 +15,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "${SCRIPT_DIR}/lib/susfs-apply.sh"
 # shellcheck source=lib/nomount-setup.sh
 . "${SCRIPT_DIR}/lib/nomount-setup.sh"
+# shellcheck source=lib/zeromount-setup.sh
+. "${SCRIPT_DIR}/lib/zeromount-setup.sh"
 # shellcheck source=lib/verify.sh
 . "${SCRIPT_DIR}/lib/verify.sh"
 
@@ -132,6 +134,14 @@ if [[ "$KSU_TYPE" == *susfs* ]]; then
   verify_susfs_source_integration "${KSU_KERNEL_DIR}"
 fi
 
+if [[ "$KSU_TYPE" == *zeromount* ]]; then
+  : "${ZEROMOUNT_REPO:?}"
+  : "${ZEROMOUNT_COMMIT:?}"
+  : "${ZEROMOUNT_GKI_TAG:?}"
+  install_zeromount "$ZEROMOUNT_REPO" "$ZEROMOUNT_COMMIT" "$ZEROMOUNT_GKI_TAG"
+  verify_zeromount_source_integration
+fi
+
 if [[ "$KSU_TYPE" == *nomount* ]]; then
   : "${NOMOUNT_REPO:?}"
   : "${NOMOUNT_REF:?}"
@@ -182,6 +192,9 @@ if [[ "$KSU_TYPE" == *nomount* ]]; then
   require_config_enabled out/.config CONFIG_KEYS
   require_config_enabled out/.config CONFIG_NOMOUNT
 fi
+if [[ "$KSU_TYPE" == *zeromount* ]]; then
+  require_config_enabled out/.config CONFIG_ZEROMOUNT
+fi
 if [[ "$KSU_TYPE" == *KPM* ]]; then
   require_config_enabled out/.config CONFIG_KPM
   require_config_enabled out/.config CONFIG_KALLSYMS
@@ -213,6 +226,18 @@ if [[ "$BUILD_MODE" == "Patch/config validation only" ]]; then
   if [[ "$KSU_TYPE" == *nomount* ]]; then
     SMOKE_TARGETS+=("${NOMOUNT_FS_DIR}/nomount/nomount.o")
   fi
+  if [[ "$KSU_TYPE" == *zeromount* ]]; then
+    SMOKE_TARGETS+=(
+      fs/zeromount.o
+      fs/namei.o
+      fs/readdir.o
+      fs/d_path.o
+      fs/stat.o
+      fs/statfs.o
+      fs/xattr.o
+      fs/proc/base.o
+    )
+  fi
   if [[ "$KSU_TYPE" == *KPM* ]]; then
     if [[ "$KSU_TYPE" != *susfs* ]]; then
       SMOKE_TARGETS+=("${KSU_DRIVER_DIR}/kernelsu/kernelsu.o")
@@ -229,7 +254,7 @@ if [[ "$BUILD_MODE" == "Patch/config validation only" ]]; then
     COMPILE_STARTED_AT="$(date +%s)"
     if ! make -j"$(nproc)" "${MAKE_ARGS[@]}" "${SMOKE_TARGETS[@]}" 2>&1 | tee integration-smoke.log; then
       COMPILE_SECONDS=$((COMPILE_SECONDS + $(date +%s) - COMPILE_STARTED_AT))
-      echo "::error::SUSFS/NoMount/KPM integration object smoke compile failed."
+      echo "::error::SUSFS/NoMount/ZeroMount/KPM integration object smoke compile failed."
       exit 1
     fi
     COMPILE_SECONDS=$((COMPILE_SECONDS + $(date +%s) - COMPILE_STARTED_AT))
@@ -238,6 +263,9 @@ if [[ "$BUILD_MODE" == "Patch/config validation only" ]]; then
     fi
     if [[ "$KSU_TYPE" == *nomount* ]]; then
       verify_nomount_binary_presence
+    fi
+    if [[ "$KSU_TYPE" == *zeromount* ]]; then
+      verify_zeromount_binary_presence
     fi
     if [[ "$KSU_TYPE" == *KPM* ]]; then
       verify_kpm_binary_presence
@@ -274,6 +302,11 @@ if [[ "$KSU_TYPE" == *susfs* ]]; then
 fi
 if [[ "$KSU_TYPE" == *nomount* ]]; then
   verify_nomount_binary_presence
+fi
+if [[ "$KSU_TYPE" == *zeromount* ]]; then
+  echo "==== ZEROMOUNT CONFIG SNAPSHOT ===="
+  grep -E '^CONFIG_ZEROMOUNT=|^CONFIG_KSU_SUSFS=' out/.config || true
+  verify_zeromount_binary_presence
 fi
 if [[ "$KSU_TYPE" == *KPM* ]]; then
   echo "==== KPM CONFIG SNAPSHOT ===="

@@ -275,6 +275,10 @@ apply_variant_configs() {
     enable_config_values "$config_file" CONFIG_KEYS CONFIG_NOMOUNT
   fi
 
+  if [[ "$KSU_TYPE" == *zeromount* ]]; then
+    enable_config_values "$config_file" CONFIG_ZEROMOUNT
+  fi
+
   if [[ "$KSU_TYPE" == *KPM* ]]; then
     enable_config_values "$config_file" CONFIG_KPM CONFIG_KALLSYMS CONFIG_KALLSYMS_ALL
   fi

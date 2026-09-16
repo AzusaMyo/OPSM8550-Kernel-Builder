@@ -231,12 +231,15 @@ resolve_root_solution() {
     "Official KernelSU") KSU_TYPE="Official-KernelSU" ;;
     "KernelSU-Next") KSU_TYPE="KernelSU-Next" ;;
     "KernelSU-Next + SUSFS") KSU_TYPE="KernelSU-Next-with-susfs" ;;
+    "KernelSU-Next + SUSFS + ZeroMount (experimental)") KSU_TYPE="KernelSU-Next-with-susfs-zeromount" ;;
     "KowSU") KSU_TYPE="KowSU" ;;
     "SukiSU Ultra + KPM (experimental)") KSU_TYPE="SukiSU-Ultra-with-KPM" ;;
     "SukiSU Ultra + SUSFS + KPM (experimental)") KSU_TYPE="SukiSU-Ultra-with-susfs-KPM" ;;
+    "SukiSU Ultra + SUSFS + ZeroMount + KPM (experimental)") KSU_TYPE="SukiSU-Ultra-with-susfs-zeromount-KPM" ;;
     "SukiSU Ultra + SUSFS + NoMount + KPM (experimental)") KSU_TYPE="SukiSU-Ultra-with-susfs-nomount-KPM" ;;
     "ReSukiSU") KSU_TYPE="ReSukiSU" ;;
     "ReSukiSU + susfs") KSU_TYPE="ReSukiSU-with-susfs" ;;
+    "ReSukiSU + SUSFS + ZeroMount (experimental)") KSU_TYPE="ReSukiSU-with-susfs-zeromount" ;;
     "ReSukiSU + SUSFS + NoMount (experimental)") KSU_TYPE="ReSukiSU-with-susfs-nomount" ;;
     *)
       echo "::error::Unsupported root solution: $1"

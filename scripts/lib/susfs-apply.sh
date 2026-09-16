@@ -12,7 +12,7 @@ version_is_at_least() {
 
 is_sukisu_susfs_variant() {
   case "${KSU_TYPE:-}" in
-    SukiSU-Ultra-with-susfs-KPM|SukiSU-Ultra-with-susfs-nomount-KPM) return 0 ;;
+    SukiSU-Ultra-with-susfs-KPM|SukiSU-Ultra-with-susfs-nomount-KPM|SukiSU-Ultra-with-susfs-zeromount-KPM) return 0 ;;
     *) return 1 ;;
   esac
 }

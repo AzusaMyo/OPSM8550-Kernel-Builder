@@ -324,6 +324,76 @@ verify_nomount_source_integration() {
   }
 }
 
+verify_zeromount_source_integration() {
+  test -f fs/zeromount.c || {
+    echo "::error::ZeroMount driver source is missing at fs/zeromount.c."
+    exit 1
+  }
+  test -f include/linux/zeromount.h || {
+    echo "::error::ZeroMount public header is missing at include/linux/zeromount.h."
+    exit 1
+  }
+  grep -Fq 'obj-$(CONFIG_ZEROMOUNT)' fs/Makefile || {
+    echo "::error::fs/Makefile does not wire the ZeroMount object."
+    exit 1
+  }
+  grep -Eq '^[[:space:]]*config ZEROMOUNT$' fs/Kconfig || {
+    echo "::error::fs/Kconfig does not expose CONFIG_ZEROMOUNT."
+    exit 1
+  }
+  grep -Fq 'zeromount_getname_hook' fs/namei.c || {
+    echo "::error::ZeroMount getname VFS hook is missing from fs/namei.c."
+    exit 1
+  }
+  grep -Fq 'zeromount_inject_dents64' fs/readdir.c || {
+    echo "::error::ZeroMount directory-entry hook is missing from fs/readdir.c."
+    exit 1
+  }
+
+  {
+    echo "==== ZEROMOUNT SOURCE PROOF ===="
+    echo "kernel_commit=${KERNEL_COMMIT}"
+    echo "zeromount_commit=${ZEROMOUNT_COMMIT}"
+    echo "zeromount_gki_tag=${ZEROMOUNT_GKI_TAG}"
+    echo "zeromount_patch_sha256=${ZEROMOUNT_PATCH_SHA256}"
+    grep -Fn 'obj-$(CONFIG_ZEROMOUNT)' fs/Makefile
+    grep -nE 'config ZEROMOUNT|zeromount_getname_hook|zeromount_inject_dents64' \
+      fs/Kconfig fs/namei.c fs/readdir.c | head -n 20
+  } | tee zeromount-source-proof.txt
+}
+
+verify_zeromount_binary_presence() {
+  local symbol_hits=0
+  local string_hits=0
+  local object_file="out/fs/zeromount.o"
+
+  if [[ -f "$object_file" ]]; then
+    nm "$object_file" | grep -E 'zeromount_(init|getname_hook|resolve_path)' && symbol_hits=1 || true
+    strings "$object_file" | grep -E 'ZeroMount:|zeromount' && string_hits=1 || true
+  fi
+  if [[ -f out/System.map ]]; then
+    grep -E 'zeromount_(init|getname_hook|resolve_path)' out/System.map && symbol_hits=1 || true
+  fi
+  if [[ -f out/vmlinux ]]; then
+    strings out/vmlinux | grep -E 'ZeroMount:|/dev/zeromount|zeromount' && string_hits=1 || true
+  fi
+  if [[ "$symbol_hits" -eq 0 && "$string_hits" -eq 0 ]]; then
+    echo "::error::CONFIG_ZEROMOUNT=y, but no ZeroMount signature was found in the kernel artifacts."
+    exit 1
+  fi
+
+  {
+    echo "==== ZEROMOUNT BINARY PROOF ===="
+    echo "kernel_commit=${KERNEL_COMMIT}"
+    echo "zeromount_commit=${ZEROMOUNT_COMMIT}"
+    echo "zeromount_gki_tag=${ZEROMOUNT_GKI_TAG}"
+    if [[ -f "$object_file" ]]; then
+      nm "$object_file" | grep -E 'zeromount_(init|getname_hook|resolve_path)' | head -n 20 || true
+      strings "$object_file" | grep -E 'ZeroMount:|zeromount' | head -n 20 || true
+    fi
+  } | tee zeromount-proof.txt
+}
+
 verify_nomount_binary_presence() {
   local symbol_hits=0
   local string_hits=0

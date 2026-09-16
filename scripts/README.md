@@ -12,7 +12,7 @@ Shell implementation used by the GitHub Actions workflows.
 | `download-clang.sh` | Downloads an AOSP Clang directory from an exact pinned Gitiles commit. |
 | `compile-kernel.sh` | Applies integrations, generates config, performs validation-only runs or a full ccache-backed build, and reports timing/cache metrics. |
 | `make-anykernel-zip.sh` | Creates a device-checked AnyKernel3 ZIP, provenance manifest, release notes, raw Image asset, and SHA-256 checksums. |
-| `publish-diagnostics.sh` | Appends config, KPM, SUSFS, and NoMount proof files to the job summary. |
+| `publish-diagnostics.sh` | Appends config, KPM, SUSFS, NoMount, and ZeroMount proof files to the job summary. |
 
 ## Shared libraries
 
@@ -42,10 +42,13 @@ Shell implementation used by the GitHub Actions workflows.
   for the recognized SukiSU Ultra kernel-umount and manager-allowlist drift.
 - `lib/nomount-setup.sh` integrates an exact NoMount commit into the kernel fs
   Kconfig/Makefile only for the explicit experimental preset.
+- `lib/zeromount-setup.sh` fetches a pinned Super-Builders revision, verifies
+  the versioned VFS patch checksum, and preflights it before applying it after
+  SUSFS.
 - `lib/verify.sh` performs source, config, hook-mode, and binary verification,
   including an LTO-aware `llvm-nm` check of the compiled KPM resolver and a
   `vmlinux.symvers` check for the external-module ABI, plus dedicated KPM,
-  SUSFS, NoMount, and external-module proofs.
+  SUSFS, NoMount, ZeroMount, and external-module proofs.
 
 ## Tests
 
@@ -70,4 +73,4 @@ integration object compilation and a LunarisOS OnePlus 11 baseline smoke test.
 - Full builds pass ccache compiler launchers on the `make` command line and use
   deterministic Kbuild metadata for repeatability.
 - Unknown device/source pairs, invalid branch names, patch rejects, missing
-  configs, and missing root/KPM/SUSFS/NoMount signatures fail closed.
+  configs, and missing root/KPM/SUSFS/NoMount/ZeroMount signatures fail closed.

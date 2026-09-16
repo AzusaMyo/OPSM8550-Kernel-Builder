@@ -72,22 +72,26 @@ on:
           - clang-r450784d (Android 13 / LineageOS 20 era)
           - clang-r416183b1 (Android 12 / LineageOS 19.1 era)
       root_solution:
-        description: KernelSU / root add-on preset; the batch option builds all three listed variants
+        description: KernelSU / root add-on preset; batch options build three related variants
         required: true
         type: choice
         default: No root changes
         options:
           - Build all 3 featured SUSFS variants (batch)
+          - Build all 3 ZeroMount variants (batch)
           - No root changes
           - Official KernelSU
           - KernelSU-Next
           - KernelSU-Next + SUSFS
+          - KernelSU-Next + SUSFS + ZeroMount (experimental)
           - KowSU
           - SukiSU Ultra + KPM (experimental)
           - SukiSU Ultra + SUSFS + KPM (experimental)
+          - SukiSU Ultra + SUSFS + ZeroMount + KPM (experimental)
           - SukiSU Ultra + SUSFS + NoMount + KPM (experimental)
           - ReSukiSU
           - ReSukiSU + susfs
+          - ReSukiSU + SUSFS + ZeroMount (experimental)
           - ReSukiSU + SUSFS + NoMount (experimental)
       build_mode:
         description: Validate quickly, keep an artifact, or also publish a release
@@ -150,7 +154,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        root_solution: ${{ fromJSON(inputs.root_solution == 'Build all 3 featured SUSFS variants (batch)' && '["SukiSU Ultra + SUSFS + NoMount + KPM (experimental)","ReSukiSU + SUSFS + NoMount (experimental)","KernelSU-Next + SUSFS"]' || format('["{0}"]', inputs.root_solution)) }}
+        root_solution: ${{ fromJSON(inputs.root_solution == 'Build all 3 featured SUSFS variants (batch)' && '["SukiSU Ultra + SUSFS + NoMount + KPM (experimental)","ReSukiSU + SUSFS + NoMount (experimental)","KernelSU-Next + SUSFS"]' || inputs.root_solution == 'Build all 3 ZeroMount variants (batch)' && '["SukiSU Ultra + SUSFS + ZeroMount + KPM (experimental)","ReSukiSU + SUSFS + ZeroMount (experimental)","KernelSU-Next + SUSFS + ZeroMount (experimental)"]' || format('["{0}"]', inputs.root_solution)) }}
     concurrency:
       group: kernel-ci-${{ github.ref_name }}-${{ inputs.build_profile }}-${{ matrix.root_solution }}-${{ inputs.branch_mode }}-${{ inputs.kernel_branch }}-${{ inputs.build_mode }}
       cancel-in-progress: true
@@ -325,6 +329,8 @@ jobs:
             ${{ github.workspace }}/${{ steps.resolve.outputs.soc }}/susfs-proof.txt
             ${{ github.workspace }}/${{ steps.resolve.outputs.soc }}/nomount-source-proof.txt
             ${{ github.workspace }}/${{ steps.resolve.outputs.soc }}/nomount-proof.txt
+            ${{ github.workspace }}/${{ steps.resolve.outputs.soc }}/zeromount-source-proof.txt
+            ${{ github.workspace }}/${{ steps.resolve.outputs.soc }}/zeromount-proof.txt
             ${{ github.workspace }}/${{ steps.resolve.outputs.soc }}/kpm-source-proof.txt
             ${{ github.workspace }}/${{ steps.resolve.outputs.soc }}/kpm-proof.txt
             ${{ github.workspace }}/${{ steps.resolve.outputs.soc }}/external-module-proof.txt

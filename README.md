@@ -56,9 +56,9 @@ safely.
 `Build OnePlus Kernel` offers three modes:
 
 - `Patch/config validation only` clones exact upstream revisions, applies the
-  selected KernelSU/KPM/SUSFS/NoMount integration, verifies the final config,
-  and smoke-compiles the affected KPM, SUSFS, VFS, proc, reboot, and NoMount
-  objects without spending time on a full kernel compile.
+  selected KernelSU/KPM/SUSFS/NoMount/ZeroMount integration, verifies the final
+  config, and smoke-compiles the affected KPM, SUSFS, VFS, proc, reboot,
+  NoMount, and ZeroMount objects without spending time on a full kernel compile.
 - `Full build (artifact only)` builds and uploads a 14-day workflow artifact.
   This is the default and does not create a permanent GitHub Release.
 - `Full build and publish release` first reserves an immutable tag at the
@@ -86,19 +86,23 @@ Available workflow presets:
 | `Official KernelSU` | Official KernelSU | Supported |
 | `KernelSU-Next` | KernelSU-Next | Supported |
 | `KernelSU-Next + SUSFS` | KernelSU-Next with SUSFS | Supported |
+| `KernelSU-Next + SUSFS + ZeroMount (experimental)` | KernelSU-Next with SUSFS and ZeroMount | Experimental |
 | `KowSU` | KowSU | Supported |
 | `SukiSU Ultra + KPM (experimental)` | SukiSU Ultra with KPM | Experimental |
 | `SukiSU Ultra + SUSFS + KPM (experimental)` | SukiSU Ultra with SUSFS and KPM | Experimental |
+| `SukiSU Ultra + SUSFS + ZeroMount + KPM (experimental)` | SukiSU Ultra with SUSFS, ZeroMount, and KPM | Experimental |
 | `SukiSU Ultra + SUSFS + NoMount + KPM (experimental)` | SukiSU Ultra with SUSFS, NoMount, and KPM | Experimental |
 | `ReSukiSU` | ReSukiSU | Supported |
 | `ReSukiSU + susfs` | ReSukiSU with SUSFS | Supported |
+| `ReSukiSU + SUSFS + ZeroMount (experimental)` | ReSukiSU with SUSFS and ZeroMount | Experimental |
 | `ReSukiSU + SUSFS + NoMount (experimental)` | ReSukiSU with SUSFS and NoMount | Experimental |
 
 Selecting `Build all 3 featured SUSFS variants (batch)` starts a three-entry
-matrix in one workflow run for `SukiSU Ultra + SUSFS + NoMount + KPM`,
-`ReSukiSU + SUSFS + NoMount`, and `KernelSU-Next + SUSFS`. Each entry keeps its
-own package and diagnostics artifact; release mode publishes all three builds
-under the same immutable release tag.
+matrix with the existing NoMount/SUSFS combinations. Selecting `Build all 3
+ZeroMount variants (batch)` instead builds `SukiSU Ultra + SUSFS + ZeroMount +
+KPM`, `ReSukiSU + SUSFS + ZeroMount`, and `KernelSU-Next + SUSFS + ZeroMount`.
+Each entry keeps its own package and diagnostics artifact; release mode publishes
+all three builds under the same immutable release tag.
 
 KPM is available only through the dedicated SukiSU Ultra presets because current
 ReSukiSU no longer supports it. The pipeline resolves SukiSU Ultra to an exact
@@ -112,6 +116,13 @@ the signature checks against the final kernel artifacts. Both paths fail closed
 when expected wiring, config, objects, or symbols are missing. KPM resolver
 verification uses AOSP Clang's LTO-aware `llvm-nm` on the compiled resolver
 object instead of GNU `nm` on the aggregate LTO intermediate.
+
+The three ZeroMount presets fetch the version-matched VFS patch from a pinned
+Super-Builders commit, verify a per-GKI SHA-256, and apply it only after SUSFS.
+The pipeline verifies the `getname()` and directory-entry hooks, requires
+`CONFIG_ZEROMOUNT=y`, and checks the compiled driver. ZeroMount and NoMount are
+kept in separate presets because both implement VFS path redirection and are not
+safe to stack without device-specific runtime testing.
 
 SUSFS branches are selected from the SoC and Android/kernel branch. Known vendor
 include drift and the current SukiSU Ultra UTS-spoof, KPM resolver, kernel-umount,
@@ -146,7 +157,8 @@ an explicit opt-in instead of changing existing build presets.
 
 Manually selected branch names are validated with Git before they are written
 to GitHub Actions environment files. Every kernel, modules, root implementation,
-SUSFS, NoMount, and AnyKernel input is resolved to an exact commit before cloning.
+SUSFS, NoMount, ZeroMount patches, and AnyKernel input are resolved to exact
+commits before cloning.
 
 ## Build performance
 
@@ -219,19 +231,22 @@ Pushes and pull requests run:
 
 - Bash syntax checks
 - ShellCheck at warning severity
-- offline tests for all twelve profile mappings, root mappings (including
-  KernelSU-Next + SUSFS and SukiSU Ultra + SUSFS + NoMount + KPM), Clang selection,
-  KPM configuration, SUSFS selection/version floor, NoMount selection/wiring,
+- offline tests for all twelve profile mappings, root mappings (including the
+  three ZeroMount variants), Clang selection, KPM configuration, SUSFS
+  selection/version floor, NoMount/ZeroMount selection and wiring,
   Android version inference, and workflow option synchronization
 - actionlint for all workflow files
 
 `Check upstream health` runs every Monday and can also be started manually. It
-resolves exact commits for all twelve profiles, then runs an eighteen-job
+resolves exact commits for all twelve profiles, then runs a twenty-five-job
 smoke-test matrix: KernelSU-Next + SUSFS, SukiSU Ultra + SUSFS + NoMount + KPM
 (including the crDroid OnePlus 12 / Android 6.1 vendor include drift),
 and ReSukiSU + SUSFS + NoMount are validated on representative SM7550 (including
 both CE4 source families), SM8450, SM8550, and SM8650 sources, with an additional
 baseline validation for the LunarisOS OnePlus 11 and crDroid OnePlus 12 sources.
+The SukiSU Ultra ZeroMount preset is validated across the representative
+5.10, 5.15, and 6.1 source families; the KernelSU-Next and ReSukiSU ZeroMount
+presets additionally run against the representative SM8550 LineageOS source.
 
 ## Important limitations
 
@@ -242,8 +257,9 @@ baseline validation for the LunarisOS OnePlus 11 and crDroid OnePlus 12 sources.
   version cannot be inferred safely.
 - This pipeline builds the raw GKI `Image`; it does not rebuild every vendor
   module or replace device-specific firmware.
-- NoMount modifies VFS behavior and upstream labels it experimental. Test its
-  opt-in presets on a recoverable device before distributing them.
+- NoMount and ZeroMount modify VFS behavior and their upstreams label them
+  experimental. Test their opt-in presets on a recoverable device before
+  distributing them.
 - KPM dynamically patches kernel behavior at runtime. Treat all SukiSU Ultra
   presets as experimental and test them only on a recoverable device.
 - Runtime performance tuning is intentionally left at upstream/vendor config

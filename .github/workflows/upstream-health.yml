@@ -38,6 +38,7 @@ jobs:
           - KernelSU-Next + SUSFS
           - ReSukiSU + SUSFS + NoMount (experimental)
           - SukiSU Ultra + SUSFS + NoMount + KPM (experimental)
+          - SukiSU Ultra + SUSFS + ZeroMount + KPM (experimental)
         profile:
           - SM7550 | OnePlus Nord CE4 | development
           - SM7550 | OnePlus Nord CE4 | crDroid (recommended for crDroid)
@@ -45,6 +46,10 @@ jobs:
           - SM8550 | OnePlus 11 / 12R | LineageOS (recommended)
           - SM8650 | OnePlus 12 | LineageOS (recommended)
         include:
+          - integration: KernelSU-Next + SUSFS + ZeroMount (experimental)
+            profile: SM8550 | OnePlus 11 / 12R | LineageOS (recommended)
+          - integration: ReSukiSU + SUSFS + ZeroMount (experimental)
+            profile: SM8550 | OnePlus 11 / 12R | LineageOS (recommended)
           - integration: No root changes
             profile: SM8550 | OnePlus 11 | LunarisOS
           - integration: No root changes

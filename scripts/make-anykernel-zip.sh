@@ -38,6 +38,10 @@ SUSFS_VERSION="${SUSFS_VERSION:-}"
 NOMOUNT_REF="${NOMOUNT_REF:-}"
 NOMOUNT_COMMIT="${NOMOUNT_COMMIT:-}"
 NOMOUNT_VERSION="${NOMOUNT_VERSION:-}"
+ZEROMOUNT_REPO="${ZEROMOUNT_REPO:-}"
+ZEROMOUNT_COMMIT="${ZEROMOUNT_COMMIT:-}"
+ZEROMOUNT_GKI_TAG="${ZEROMOUNT_GKI_TAG:-}"
+ZEROMOUNT_PATCH_SHA256="${ZEROMOUNT_PATCH_SHA256:-}"
 GITHUB_SERVER_URL="${GITHUB_SERVER_URL:-https://github.com}"
 GITHUB_REPOSITORY="${GITHUB_REPOSITORY:-local/OPSM8550-Kernel-Builder}"
 GITHUB_RUN_ID="${GITHUB_RUN_ID:-local}"
@@ -119,6 +123,10 @@ jq -n \
   --arg nomount_ref "$NOMOUNT_REF" \
   --arg nomount_commit "$NOMOUNT_COMMIT" \
   --arg nomount_version "$NOMOUNT_VERSION" \
+  --arg zeromount_repo "$ZEROMOUNT_REPO" \
+  --arg zeromount_commit "$ZEROMOUNT_COMMIT" \
+  --arg zeromount_gki_tag "$ZEROMOUNT_GKI_TAG" \
+  --arg zeromount_patch_sha256 "$ZEROMOUNT_PATCH_SHA256" \
   --arg anykernel_commit "$ANYKERNEL_COMMIT" \
   --arg builder_commit "$GITHUB_SHA" \
   --arg run_url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
@@ -147,6 +155,10 @@ jq -n \
     nomount_ref: $nomount_ref,
     nomount_commit: $nomount_commit,
     nomount_version: $nomount_version,
+    zeromount_patch_repository: $zeromount_repo,
+    zeromount_patch_commit: $zeromount_commit,
+    zeromount_gki_tag: $zeromount_gki_tag,
+    zeromount_patch_sha256: $zeromount_patch_sha256,
     anykernel_commit: $anykernel_commit,
     builder_commit: $builder_commit,
     workflow_run: $run_url,
@@ -167,11 +179,15 @@ cp "${SOC}/out/arch/arm64/boot/Image" "${ASSET_DIR}/${IMAGE_ASSET}"
 
 SUSFS_NOTE="disabled"
 NOMOUNT_NOTE="disabled"
+ZEROMOUNT_NOTE="disabled"
 if [[ -n "$SUSFS_VERSION" ]]; then
   SUSFS_NOTE="v${SUSFS_VERSION} (${SUSFS_REF}, ${SUSFS_COMMIT})"
 fi
 if [[ -n "$NOMOUNT_VERSION" ]]; then
   NOMOUNT_NOTE="v${NOMOUNT_VERSION} (${NOMOUNT_REF}, ${NOMOUNT_COMMIT})"
+fi
+if [[ -n "$ZEROMOUNT_COMMIT" ]]; then
+  ZEROMOUNT_NOTE="${ZEROMOUNT_GKI_TAG} (${ZEROMOUNT_COMMIT}, sha256:${ZEROMOUNT_PATCH_SHA256})"
 fi
 
 cat > "$ASSET_DIR/release-notes.md" <<EOF_NOTES
@@ -191,6 +207,7 @@ cat > "$ASSET_DIR/release-notes.md" <<EOF_NOTES
 - KPM: ${KPM_ENABLED}
 - SUSFS: ${SUSFS_NOTE}
 - NoMount: ${NOMOUNT_NOTE}
+- ZeroMount: ${ZEROMOUNT_NOTE}
 
 The flashable ZIP performs a device-codename check before modifying the boot partition.
 Only flash it on the listed target devices, and keep a known-good stock boot image available.

@@ -8,6 +8,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "${SCRIPT_DIR}/../lib/anykernel-helpers.sh"
 # shellcheck source=../lib/nomount-setup.sh
 . "${SCRIPT_DIR}/../lib/nomount-setup.sh"
+# shellcheck source=../lib/zeromount-setup.sh
+. "${SCRIPT_DIR}/../lib/zeromount-setup.sh"
 # shellcheck source=../lib/susfs-apply.sh
 . "${SCRIPT_DIR}/../lib/susfs-apply.sh"
 # shellcheck source=../lib/kernel-helpers.sh
@@ -40,6 +42,7 @@ RESOLVER_SCRIPT="${SCRIPT_DIR}/../resolve-profile.sh"
 KSU_SETUP_SCRIPT="${SCRIPT_DIR}/../lib/ksu-setup.sh"
 GIT_HELPERS_SCRIPT="${SCRIPT_DIR}/../lib/git-helpers.sh"
 SUSFS_APPLY_SCRIPT="${SCRIPT_DIR}/../lib/susfs-apply.sh"
+ZEROMOUNT_SETUP_SCRIPT="${SCRIPT_DIR}/../lib/zeromount-setup.sh"
 SUKISU_SUSFS_COMPAT_PATCH="${SCRIPT_DIR}/../patches/sukisu-susfs-core-init-compat.patch"
 SUKISU_SUSFS_POLICY_COMPAT_PATCH="${SCRIPT_DIR}/../patches/sukisu-susfs-policy-compat.patch"
 sh -n "$ANYKERNEL_TEMPLATE" || fail "AnyKernel device template has invalid shell syntax"
@@ -144,6 +147,8 @@ resolve_root_solution "ReSukiSU + susfs"
 assert_eq "ReSukiSU-with-susfs" "$KSU_TYPE" "root mapping"
 resolve_root_solution "KernelSU-Next + SUSFS"
 assert_eq "KernelSU-Next-with-susfs" "$KSU_TYPE" "KernelSU-Next SUSFS root mapping"
+resolve_root_solution "KernelSU-Next + SUSFS + ZeroMount (experimental)"
+assert_eq "KernelSU-Next-with-susfs-zeromount" "$KSU_TYPE" "KernelSU-Next ZeroMount root mapping"
 resolve_root_solution "ReSukiSU + SUSFS + NoMount (experimental)"
 assert_eq "ReSukiSU-with-susfs-nomount" "$KSU_TYPE" "NoMount root mapping"
 resolve_root_solution "SukiSU Ultra + KPM (experimental)"
@@ -152,16 +157,24 @@ resolve_root_solution "SukiSU Ultra + SUSFS + KPM (experimental)"
 assert_eq "SukiSU-Ultra-with-susfs-KPM" "$KSU_TYPE" "SukiSU SUSFS/KPM root mapping"
 resolve_root_solution "SukiSU Ultra + SUSFS + NoMount + KPM (experimental)"
 assert_eq "SukiSU-Ultra-with-susfs-nomount-KPM" "$KSU_TYPE" "SukiSU SUSFS/NoMount/KPM root mapping"
+resolve_root_solution "SukiSU Ultra + SUSFS + ZeroMount + KPM (experimental)"
+assert_eq "SukiSU-Ultra-with-susfs-zeromount-KPM" "$KSU_TYPE" "SukiSU SUSFS/ZeroMount/KPM root mapping"
+resolve_root_solution "ReSukiSU + SUSFS + ZeroMount (experimental)"
+assert_eq "ReSukiSU-with-susfs-zeromount" "$KSU_TYPE" "ReSukiSU ZeroMount root mapping"
 grep -Fq -- '- ReSukiSU + SUSFS + NoMount (experimental)' "$WORKFLOW_FILE" \
   || fail "workflow is missing the NoMount root option"
 grep -Fq -- '- KernelSU-Next + SUSFS' "$WORKFLOW_FILE" \
   || fail "workflow is missing the KernelSU-Next SUSFS root option"
 grep -Fq -- '- Build all 3 featured SUSFS variants (batch)' "$WORKFLOW_FILE" \
   || fail "workflow is missing the three-variant batch root option"
+grep -Fq -- '- Build all 3 ZeroMount variants (batch)' "$WORKFLOW_FILE" \
+  || fail "workflow is missing the three-variant ZeroMount batch option"
 grep -Fq 'name: Build ${{ matrix.root_solution }}' "$WORKFLOW_FILE" \
   || fail "workflow build job does not use the root-solution matrix"
 grep -Fq '"SukiSU Ultra + SUSFS + NoMount + KPM (experimental)","ReSukiSU + SUSFS + NoMount (experimental)","KernelSU-Next + SUSFS"' "$WORKFLOW_FILE" \
-  || fail "workflow batch matrix does not contain the three featured SUSFS variants"
+  || fail "workflow original batch matrix changed unexpectedly"
+grep -Fq '"SukiSU Ultra + SUSFS + ZeroMount + KPM (experimental)","ReSukiSU + SUSFS + ZeroMount (experimental)","KernelSU-Next + SUSFS + ZeroMount (experimental)"' "$WORKFLOW_FILE" \
+  || fail "workflow batch matrix does not contain the three ZeroMount variants"
 grep -Fq 'ARTIFACT_NAME="kernel-package-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${KSU_TYPE}"' "$WORKFLOW_FILE" \
   || fail "workflow package artifact names must be unique across the batch matrix"
 grep -Fq 'KSU_REPO="https://github.com/pershoot/KernelSU-Next.git"' "$RESOLVER_SCRIPT" \
@@ -176,18 +189,34 @@ grep -Fq -- '- SukiSU Ultra + SUSFS + NoMount + KPM (experimental)' "$WORKFLOW_F
   || fail "workflow is missing the combined SukiSU SUSFS/NoMount/KPM root option"
 grep -Fq -- '- SukiSU Ultra + SUSFS + NoMount + KPM (experimental)' "$UPSTREAM_HEALTH_WORKFLOW" \
   || fail "upstream health is missing the combined SukiSU SUSFS/NoMount/KPM preset"
-grep -Fq 'SukiSU-Ultra-with-KPM|SukiSU-Ultra-with-susfs-KPM|SukiSU-Ultra-with-susfs-nomount-KPM)' "$RESOLVER_SCRIPT" \
+grep -Fq -- '- integration: KernelSU-Next + SUSFS + ZeroMount (experimental)' "$UPSTREAM_HEALTH_WORKFLOW" \
+  || fail "upstream health is missing KernelSU-Next ZeroMount"
+grep -Fq -- '- integration: ReSukiSU + SUSFS + ZeroMount (experimental)' "$UPSTREAM_HEALTH_WORKFLOW" \
+  || fail "upstream health is missing ReSukiSU ZeroMount"
+grep -Fq -- '- SukiSU Ultra + SUSFS + ZeroMount + KPM (experimental)' "$UPSTREAM_HEALTH_WORKFLOW" \
+  || fail "upstream health is missing SukiSU ZeroMount"
+grep -Fq 'SukiSU-Ultra-with-KPM|SukiSU-Ultra-with-susfs-KPM|SukiSU-Ultra-with-susfs-nomount-KPM|SukiSU-Ultra-with-susfs-zeromount-KPM)' "$RESOLVER_SCRIPT" \
   || fail "resolver does not route all SukiSU presets to SukiSU Ultra"
 grep -Fq 'SUSFS_COMMIT="$(sukisu_compatible_susfs_commit "$SUSFS_REF")"' "$RESOLVER_SCRIPT" \
   || fail "resolver does not use the SukiSU-compatible SUSFS commit map"
-grep -Fq '"SukiSU-Ultra-with-KPM"|"SukiSU-Ultra-with-susfs-KPM"|"SukiSU-Ultra-with-susfs-nomount-KPM")' "$KSU_SETUP_SCRIPT" \
+grep -Fq '"SukiSU-Ultra-with-KPM"|"SukiSU-Ultra-with-susfs-KPM"|"SukiSU-Ultra-with-susfs-nomount-KPM"|"SukiSU-Ultra-with-susfs-zeromount-KPM")' "$KSU_SETUP_SCRIPT" \
   || fail "KernelSU setup does not install SukiSU Ultra for all combined presets"
+grep -Fq 'ZEROMOUNT_COMMIT="2978dcad87dc7055e2e4596c603313c553a9a4b4"' "$RESOLVER_SCRIPT" \
+  || fail "ZeroMount patch source is not pinned to the tested commit"
+for zeromount_tag in android13-5.10 android13-5.15 android14-5.15 android14-6.1; do
+  [[ "$(zeromount_patch_sha256 "$zeromount_tag")" =~ ^[0-9a-f]{64}$ ]] \
+    || fail "ZeroMount checksum mapping is missing for $zeromount_tag"
+done
+grep -Fq 'patch --dry-run --batch --forward --fuzz=3 -p1' "$ZEROMOUNT_SETUP_SCRIPT" \
+  || fail "ZeroMount integration must validate the whole patch before applying it"
 grep -Fq 'resolve_known_sukisu_susfs_rejects' "$SUSFS_APPLY_SCRIPT" \
   || fail "SUSFS integration is missing the guarded SukiSU drift resolver"
 KSU_TYPE="SukiSU-Ultra-with-susfs-KPM"
 is_sukisu_susfs_variant || fail "SukiSU SUSFS/KPM preset must allow guarded SUSFS drift repair"
 KSU_TYPE="SukiSU-Ultra-with-susfs-nomount-KPM"
 is_sukisu_susfs_variant || fail "SukiSU SUSFS/NoMount/KPM preset must allow guarded SUSFS drift repair"
+KSU_TYPE="SukiSU-Ultra-with-susfs-zeromount-KPM"
+is_sukisu_susfs_variant || fail "SukiSU SUSFS/ZeroMount/KPM preset must allow guarded SUSFS drift repair"
 KSU_TYPE="SukiSU-Ultra-with-KPM"
 if is_sukisu_susfs_variant; then
   fail "SukiSU KPM-only preset must not enter SUSFS drift repair"
@@ -265,6 +294,7 @@ assert_eq "16" "$SUPPORTED_ANDROID_VERSIONS" "Android 16 development detection"
 ANYKERNEL_FIXTURE="$(mktemp)"
 UPDATE_BINARY_FIXTURE="$(mktemp)"
 KPM_CONFIG_FIXTURE="$(mktemp)"
+ZEROMOUNT_CONFIG_FIXTURE="$(mktemp)"
 MODULE_CONFIG_FIXTURE="$(mktemp)"
 SPINLOCK_KCONFIG_FIXTURE="$(mktemp)"
 KPM_VERIFY_FIXTURE="$(mktemp -d)"
@@ -273,7 +303,7 @@ EXTRACT_CERT_FIXTURE_DIR="$(mktemp -d)"
 ANYKERNEL_CACHE_FIXTURE_DIR="$(mktemp -d)"
 ANYKERNEL_PACKAGE_FIXTURE_DIR="$(mktemp -d)"
 SUSFS_VENDOR_FIXTURE_DIR="$(mktemp -d)"
-trap 'rm -f "$ANYKERNEL_FIXTURE" "$UPDATE_BINARY_FIXTURE" "$KPM_CONFIG_FIXTURE" "$MODULE_CONFIG_FIXTURE" "$SPINLOCK_KCONFIG_FIXTURE"; rm -rf "$KPM_VERIFY_FIXTURE" "$NOMOUNT_FIXTURE_DIR" "$EXTRACT_CERT_FIXTURE_DIR" "$ANYKERNEL_CACHE_FIXTURE_DIR" "$ANYKERNEL_PACKAGE_FIXTURE_DIR" "$SUSFS_VENDOR_FIXTURE_DIR"' EXIT
+trap 'rm -f "$ANYKERNEL_FIXTURE" "$UPDATE_BINARY_FIXTURE" "$KPM_CONFIG_FIXTURE" "$ZEROMOUNT_CONFIG_FIXTURE" "$MODULE_CONFIG_FIXTURE" "$SPINLOCK_KCONFIG_FIXTURE"; rm -rf "$KPM_VERIFY_FIXTURE" "$NOMOUNT_FIXTURE_DIR" "$EXTRACT_CERT_FIXTURE_DIR" "$ANYKERNEL_CACHE_FIXTURE_DIR" "$ANYKERNEL_PACKAGE_FIXTURE_DIR" "$SUSFS_VENDOR_FIXTURE_DIR"' EXIT
 
 mkdir -p "$SUSFS_VENDOR_FIXTURE_DIR/fs"
 cat > "$SUSFS_VENDOR_FIXTURE_DIR/fs/namespace.c" <<'EOF'
@@ -432,6 +462,15 @@ grep -q '^CONFIG_KSU_SUSFS_SUS_MAP=y$' "$KPM_CONFIG_FIXTURE" || fail "combined p
 grep -q '^CONFIG_KSU_SUSFS_OPEN_REDIRECT=y$' "$KPM_CONFIG_FIXTURE" || fail "combined preset SUSFS redirect config"
 grep -q '^CONFIG_KEYS=y$' "$KPM_CONFIG_FIXTURE" || fail "combined preset NoMount key config"
 grep -q '^CONFIG_NOMOUNT=y$' "$KPM_CONFIG_FIXTURE" || fail "combined preset NoMount config"
+
+KSU_TYPE="SukiSU-Ultra-with-susfs-zeromount-KPM"
+apply_variant_configs "$ZEROMOUNT_CONFIG_FIXTURE"
+grep -q '^CONFIG_ZEROMOUNT=y$' "$ZEROMOUNT_CONFIG_FIXTURE" || fail "combined preset ZeroMount config"
+grep -q '^CONFIG_KSU_SUSFS=y$' "$ZEROMOUNT_CONFIG_FIXTURE" || fail "ZeroMount preset SUSFS config"
+grep -q '^CONFIG_KPM=y$' "$ZEROMOUNT_CONFIG_FIXTURE" || fail "ZeroMount preset KPM config"
+if grep -q '^CONFIG_NOMOUNT=y$' "$ZEROMOUNT_CONFIG_FIXTURE"; then
+  fail "ZeroMount preset must not enable NoMount"
+fi
 
 cat > "$MODULE_CONFIG_FIXTURE" <<'EOF'
 CONFIG_MODULES=y
@@ -643,4 +682,4 @@ insert_line_before_last_match \
 assert_eq "4" "$(grep -nF 'source "fs/nomount/Kconfig"' "$NOMOUNT_FIXTURE_DIR/Kconfig" | cut -d: -f1)" \
   "NoMount Kconfig insertion"
 
-echo "PASS: profiles, source compatibility, KPM, SUSFS floor, NoMount integration, and AnyKernel protection"
+echo "PASS: profiles, source compatibility, KPM, SUSFS floor, NoMount/ZeroMount integration, and AnyKernel protection"

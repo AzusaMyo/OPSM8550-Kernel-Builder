@@ -88,7 +88,7 @@ case "$KSU_TYPE" in
     KSU_REPO="https://github.com/KernelSU-Next/KernelSU-Next.git"
     KSU_REF="dev"
     ;;
-  KernelSU-Next-with-susfs)
+  KernelSU-Next-with-susfs|KernelSU-Next-with-susfs-zeromount)
     # The official dev branch does not carry the KernelSU-side SUSFS hooks.
     # This branch tracks it and provides the matching in-tree integration.
     KSU_REPO="https://github.com/pershoot/KernelSU-Next.git"
@@ -98,7 +98,7 @@ case "$KSU_TYPE" in
     KSU_REPO="https://github.com/KOWX712/KernelSU.git"
     KSU_REF="master"
     ;;
-  SukiSU-Ultra-with-KPM|SukiSU-Ultra-with-susfs-KPM|SukiSU-Ultra-with-susfs-nomount-KPM)
+  SukiSU-Ultra-with-KPM|SukiSU-Ultra-with-susfs-KPM|SukiSU-Ultra-with-susfs-nomount-KPM|SukiSU-Ultra-with-susfs-zeromount-KPM)
     KSU_REPO="https://github.com/SukiSU-Ultra/SukiSU-Ultra.git"
     KSU_REF="main"
     ;;
@@ -126,7 +126,7 @@ if [[ "$KSU_TYPE" == *susfs* ]]; then
   SUSFS_MIN_VERSION="2.2.0"
   resolve_susfs_settings "$SOC" "$KERNEL_BRANCH"
   case "$KSU_TYPE" in
-    SukiSU-Ultra-with-susfs-KPM|SukiSU-Ultra-with-susfs-nomount-KPM)
+    SukiSU-Ultra-with-susfs-KPM|SukiSU-Ultra-with-susfs-nomount-KPM|SukiSU-Ultra-with-susfs-zeromount-KPM)
       SUSFS_COMMIT="$(sukisu_compatible_susfs_commit "$SUSFS_REF")"
       echo "::notice::Using SukiSU-compatible SUSFS v2.3.0 commit $SUSFS_COMMIT for $SUSFS_REF."
       ;;
@@ -139,6 +139,21 @@ if [[ "$KSU_TYPE" == *susfs* ]]; then
     echo "::error::Could not resolve susfs branch '$SUSFS_REF' to a commit."
     exit 1
   fi
+fi
+
+ZEROMOUNT_REPO="https://github.com/troy896/Super-Builders.git"
+ZEROMOUNT_COMMIT=""
+ZEROMOUNT_GKI_TAG=""
+if [[ "$KSU_TYPE" == *zeromount* ]]; then
+  ZEROMOUNT_COMMIT="2978dcad87dc7055e2e4596c603313c553a9a4b4"
+  ZEROMOUNT_GKI_TAG="${SUSFS_REF#gki-}"
+  case "$ZEROMOUNT_GKI_TAG" in
+    android13-5.10|android13-5.15|android14-5.15|android14-6.1) ;;
+    *)
+      echo "::error::No ZeroMount patch mapping exists for SUSFS target '$SUSFS_REF'."
+      exit 1
+      ;;
+  esac
 fi
 
 NOMOUNT_REPO="https://github.com/maxsteeel/nomount.git"
@@ -238,6 +253,9 @@ esac
   echo "SUSFS_COMMIT=$SUSFS_COMMIT"
   echo "SUSFS_PATCH_FILE=$SUSFS_PATCH_FILE"
   echo "SUSFS_MIN_VERSION=$SUSFS_MIN_VERSION"
+  echo "ZEROMOUNT_REPO=$ZEROMOUNT_REPO"
+  echo "ZEROMOUNT_COMMIT=$ZEROMOUNT_COMMIT"
+  echo "ZEROMOUNT_GKI_TAG=$ZEROMOUNT_GKI_TAG"
   echo "NOMOUNT_REPO=$NOMOUNT_REPO"
   echo "NOMOUNT_REF=$NOMOUNT_REF"
   echo "NOMOUNT_COMMIT=$NOMOUNT_COMMIT"
@@ -270,6 +288,8 @@ esac
   echo "susfs_ref=$SUSFS_REF"
   echo "susfs_commit=$SUSFS_COMMIT"
   echo "susfs_min_version=$SUSFS_MIN_VERSION"
+  echo "zeromount_commit=$ZEROMOUNT_COMMIT"
+  echo "zeromount_gki_tag=$ZEROMOUNT_GKI_TAG"
   echo "nomount_ref=$NOMOUNT_REF"
   echo "nomount_commit=$NOMOUNT_COMMIT"
   echo "anykernel_commit=$ANYKERNEL_COMMIT"
@@ -304,6 +324,9 @@ esac
   fi
   if [[ -n "$NOMOUNT_REF" ]]; then
     echo "- NoMount: $NOMOUNT_REF (\`${NOMOUNT_COMMIT}\`, experimental)"
+  fi
+  if [[ -n "$ZEROMOUNT_COMMIT" ]]; then
+    echo "- ZeroMount: $ZEROMOUNT_GKI_TAG (\`${ZEROMOUNT_COMMIT}\`, experimental)"
   fi
   if [[ "$KSU_TYPE" == *KPM* ]]; then
     echo "- KPM: enabled (experimental)"
