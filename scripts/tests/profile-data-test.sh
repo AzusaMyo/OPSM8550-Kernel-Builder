@@ -35,12 +35,14 @@ WORKFLOW_FILE="${SCRIPT_DIR}/../../.github/workflows/build.yml"
 UPSTREAM_HEALTH_WORKFLOW="${SCRIPT_DIR}/../../.github/workflows/upstream-health.yml"
 COMPILE_SCRIPT="${SCRIPT_DIR}/../compile-kernel.sh"
 ANYKERNEL_PACKAGE_SCRIPT="${SCRIPT_DIR}/../make-anykernel-zip.sh"
+ANYKERNEL_TEMPLATE="${SCRIPT_DIR}/../templates/anykernel.sh"
 RESOLVER_SCRIPT="${SCRIPT_DIR}/../resolve-profile.sh"
 KSU_SETUP_SCRIPT="${SCRIPT_DIR}/../lib/ksu-setup.sh"
 GIT_HELPERS_SCRIPT="${SCRIPT_DIR}/../lib/git-helpers.sh"
 SUSFS_APPLY_SCRIPT="${SCRIPT_DIR}/../lib/susfs-apply.sh"
 SUKISU_SUSFS_COMPAT_PATCH="${SCRIPT_DIR}/../patches/sukisu-susfs-core-init-compat.patch"
 SUKISU_SUSFS_POLICY_COMPAT_PATCH="${SCRIPT_DIR}/../patches/sukisu-susfs-policy-compat.patch"
+sh -n "$ANYKERNEL_TEMPLATE" || fail "AnyKernel device template has invalid shell syntax"
 for profile in "${profiles[@]}"; do
   grep -Fq -- "- ${profile}" "$WORKFLOW_FILE" \
     || fail "workflow is missing profile option: $profile"
@@ -91,6 +93,8 @@ grep -Fq 'ANYKERNEL_COMMIT="020dfeccf9d7e962a48400fc94d3e451df92eead"' "$RESOLVE
   || fail "resolver must pin the tested AnyKernel3 revision"
 grep -Fq 'sanitize_cached_anykernel_checkout AnyKernel3' "$ANYKERNEL_PACKAGE_SCRIPT" \
   || fail "AnyKernel packaging must sanitize a restored checkout"
+grep -Fq 'install_anykernel_template "$ANYKERNEL_TEMPLATE" "$ANYKERNEL_SCRIPT"' "$ANYKERNEL_PACKAGE_SCRIPT" \
+  || fail "AnyKernel packaging must install the device-specific flash template"
 grep -Fq 'git checkout -q --force --detach FETCH_HEAD' "$ANYKERNEL_PACKAGE_SCRIPT" \
   || fail "AnyKernel packaging must force the pinned detached checkout"
 if grep -Fq 'Kernel-SU/AnyKernel3.git' "$RESOLVER_SCRIPT"; then
@@ -307,6 +311,19 @@ grep -Fq '#include <linux/susfs_def.h>' "$SUSFS_VENDOR_FIXTURE_DIR/fs/super.c" \
   || fail "SM8650 SUSFS recovery did not add the superblock header"
 grep -Fq 'extern bool susfs_is_current_ksu_domain(void);' "$SUSFS_VENDOR_FIXTURE_DIR/fs/super.c" \
   || fail "SM8650 SUSFS recovery did not add the superblock domain declaration"
+
+ANYKERNEL_TEMPLATE_FIXTURE="$(mktemp)"
+printf '%s\n' placeholder > "$ANYKERNEL_TEMPLATE_FIXTURE"
+chmod 755 "$ANYKERNEL_TEMPLATE_FIXTURE"
+install_anykernel_template "$ANYKERNEL_TEMPLATE" "$ANYKERNEL_TEMPLATE_FIXTURE"
+grep -Fxq 'BLOCK=boot;' "$ANYKERNEL_TEMPLATE_FIXTURE" \
+  || fail "AnyKernel device template does not target boot by partition name"
+grep -Fxq 'IS_SLOT_DEVICE=1;' "$ANYKERNEL_TEMPLATE_FIXTURE" \
+  || fail "AnyKernel device template does not enable A/B slot detection"
+if grep -Eq 'omap_hsmmc|maguro|toro|tuna' "$ANYKERNEL_TEMPLATE_FIXTURE"; then
+  fail "AnyKernel device template retained an upstream example-device setting"
+fi
+rm -f "$ANYKERNEL_TEMPLATE_FIXTURE"
 
 cat > "$EXTRACT_CERT_FIXTURE_DIR/extract-cert.c" <<'EOF'
 #include <openssl/engine.h>

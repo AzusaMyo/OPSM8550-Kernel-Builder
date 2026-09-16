@@ -171,7 +171,10 @@ or regenerate every cached input.
 Generated AnyKernel3 ZIPs enable `do.devicecheck=1` and contain only the
 device-specific codenames and stock board IDs assigned to the selected profile.
 Android version checking is also enabled when the selected branch identifies a
-known Android generation.
+known Android generation. The installer targets the slot-aware `boot` partition
+by name and preserves the existing ramdisk while replacing only the kernel
+Image; upstream AnyKernel example-device paths and demo ramdisk edits are not
+included.
 
 Each full build produces `release-assets/` containing:
 

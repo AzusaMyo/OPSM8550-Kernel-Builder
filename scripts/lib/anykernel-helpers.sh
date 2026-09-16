@@ -39,6 +39,46 @@ replace_file_preserving_mode() {
   mv "$replacement" "$destination"
 }
 
+install_anykernel_template() {
+  local template="$1"
+  local destination="$2"
+  local tmp_file
+
+  test -f "$template" || {
+    echo "::error::AnyKernel device template is missing: $template"
+    return 1
+  }
+  test -f "$destination" || {
+    echo "::error::AnyKernel destination script is missing: $destination"
+    return 1
+  }
+
+  tmp_file="$(mktemp)"
+  cp "$template" "$tmp_file"
+  replace_file_preserving_mode "$tmp_file" "$destination"
+
+  grep -Fxq 'BLOCK=boot;' "$destination" || {
+    echo "::error::AnyKernel template does not target the boot partition."
+    return 1
+  }
+  grep -Fxq 'IS_SLOT_DEVICE=1;' "$destination" || {
+    echo "::error::AnyKernel template does not require A/B slot detection."
+    return 1
+  }
+  grep -Fxq 'dump_boot;' "$destination" || {
+    echo "::error::AnyKernel template does not unpack the existing boot image."
+    return 1
+  }
+  grep -Fxq 'write_boot;' "$destination" || {
+    echo "::error::AnyKernel template does not write the rebuilt boot image."
+    return 1
+  }
+  if grep -Eq 'omap_hsmmc|maguro|toro|tuna' "$destination"; then
+    echo "::error::AnyKernel template still contains upstream example-device settings."
+    return 1
+  fi
+}
+
 set_ak_property() {
   local file="$1"
   local key="$2"

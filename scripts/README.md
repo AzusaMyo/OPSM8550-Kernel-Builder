@@ -30,6 +30,8 @@ Shell implementation used by the GitHub Actions workflows.
   compatibility.
 - `lib/ksu-setup.sh` checks out the selected KernelSU-compatible implementation
   at the exact resolved commit and connects it to the kernel driver tree.
+- `templates/anykernel.sh` provides the slot-aware OnePlus `boot` installer used
+  in release ZIPs instead of AnyKernel3's example-device script.
 - `lib/susfs-apply.sh` applies SUSFS at an exact commit, repairs explicitly
   recognized upstream drift, enforces the supported version floor, and rejects
   unknown conflicts.

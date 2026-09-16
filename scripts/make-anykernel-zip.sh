@@ -83,6 +83,8 @@ test "$(git -C AnyKernel3 rev-parse HEAD)" = "$ANYKERNEL_COMMIT"
 
 ANYKERNEL_SCRIPT="AnyKernel3/anykernel.sh"
 ANYKERNEL_UPDATE_BINARY="AnyKernel3/META-INF/com/google/android/update-binary"
+ANYKERNEL_TEMPLATE="${SCRIPT_DIR}/templates/anykernel.sh"
+install_anykernel_template "$ANYKERNEL_TEMPLATE" "$ANYKERNEL_SCRIPT"
 configure_anykernel_properties \
   "$ANYKERNEL_SCRIPT" \
   "OnePlus Kernel (${KSU_TYPE}) for ${TARGET_NAME}" \
@@ -158,6 +160,7 @@ cp "${SOC}/out/arch/arm64/boot/Image" AnyKernel3/Image
   cd AnyKernel3
   zip -r9 "${ASSET_DIR}/${ZIP_NAME}.zip" . -x .git/\* .github/\*
 )
+zip -T "$ASSET_DIR/${ZIP_NAME}.zip" >/dev/null
 
 IMAGE_ASSET="Image-${ZIP_NAME}"
 cp "${SOC}/out/arch/arm64/boot/Image" "${ASSET_DIR}/${IMAGE_ASSET}"

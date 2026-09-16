@@ -34,7 +34,7 @@ jobs:
       - name: Validate shell scripts
         run: |
           set -euo pipefail
-          bash -n scripts/*.sh scripts/lib/*.sh scripts/tests/*.sh
+          bash -n scripts/*.sh scripts/lib/*.sh scripts/templates/*.sh scripts/tests/*.sh
           shellcheck --severity=warning --external-sources -P SCRIPTDIR scripts/*.sh scripts/lib/*.sh scripts/tests/*.sh
           bash scripts/tests/profile-data-test.sh
 
