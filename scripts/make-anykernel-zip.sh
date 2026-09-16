@@ -95,6 +95,7 @@ configure_anykernel_properties \
   "$DEVICE_NAMES" \
   "$SUPPORTED_ANDROID_VERSIONS"
 add_anykernel_devicecheck_diagnostics "$ANYKERNEL_UPDATE_BINARY"
+patch_anykernel_app_flash_staging "$ANYKERNEL_UPDATE_BINARY"
 
 rm -rf "$ASSET_DIR"
 mkdir -p "$ASSET_DIR"

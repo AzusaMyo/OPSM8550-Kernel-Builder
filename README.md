@@ -186,7 +186,10 @@ Android version checking is also enabled when the selected branch identifies a
 known Android generation. The installer targets the slot-aware `boot` partition
 by name and preserves the existing ramdisk while replacing only the kernel
 Image; upstream AnyKernel example-device paths and demo ramdisk edits are not
-included.
+included. When a manager app launches the installer from its private data
+directory, AnyKernel's native tools are moved to a unique executable directory
+under `/data/local/tmp`; this avoids Android SELinux rejecting BusyBox before
+the boot partition is reached.
 
 Each full build produces `release-assets/` containing:
 

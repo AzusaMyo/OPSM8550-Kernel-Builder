@@ -378,7 +378,7 @@ jobs:
             [[ -d "$package_dir" ]] || continue
             package_count=$((package_count + 1))
             artifact_name="$(basename "$package_dir")"
-            root_type="${artifact_name#kernel-package-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-}"
+            root_type="${artifact_name#"kernel-package-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-"}"
             (
               cd "$package_dir"
               sha256sum --check SHA256SUMS

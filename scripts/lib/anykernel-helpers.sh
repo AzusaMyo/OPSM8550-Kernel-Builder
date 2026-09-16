@@ -163,3 +163,51 @@ add_anykernel_devicecheck_diagnostics() {
   replace_file_preserving_mode "$tmp_file" "$file"
   grep -Fq 'ro.product.device=$device' "$file"
 }
+
+patch_anykernel_app_flash_staging() {
+  local file="$1"
+  local tmp_file
+  local akhome_line='[ "$AKHOME" ] || export AKHOME=$POSTINSTALL/tmp/anykernel;'
+  local setup_line='setup_bb;'
+
+  if grep -Fq 'export AKHOME=/data/local/tmp/anykernel-$$;' "$file" && \
+     grep -Fq 'AnyKernel work directory: $AKHOME' "$file"; then
+    return 0
+  fi
+
+  tmp_file="$(mktemp)"
+  awk -v akhome_line="$akhome_line" -v setup_line="$setup_line" '
+    $0 == akhome_line {
+      print "case \"$POSTINSTALL\" in"
+      print "  /data/user/*|/data/data/*)"
+      print "    # App-private data carries a non-executable SELinux label."
+      print "    # Stage AnyKernel tools in the executable Android shell temp area."
+      print "    export AKHOME=/data/local/tmp/anykernel-$$;"
+      print "    ;;"
+      print "  *)"
+      print "    [ \"$AKHOME\" ] || export AKHOME=$POSTINSTALL/tmp/anykernel;"
+      print "    ;;"
+      print "esac;"
+      staged = 1
+      next
+    }
+    $0 == setup_line {
+      print "ui_print \"AnyKernel work directory: $AKHOME\";"
+      print
+      diagnosed = 1
+      next
+    }
+    { print }
+    END {
+      if (!staged || !diagnosed) exit 1
+    }
+  ' "$file" > "$tmp_file" || {
+    rm -f "$tmp_file"
+    echo "::error::Could not add Android app-flasher staging compatibility to $file"
+    return 1
+  }
+
+  replace_file_preserving_mode "$tmp_file" "$file"
+  grep -Fq 'export AKHOME=/data/local/tmp/anykernel-$$;' "$file"
+  grep -Fq 'AnyKernel work directory: $AKHOME' "$file"
+}

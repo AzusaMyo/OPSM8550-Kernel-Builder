@@ -98,6 +98,8 @@ grep -Fq 'sanitize_cached_anykernel_checkout AnyKernel3' "$ANYKERNEL_PACKAGE_SCR
   || fail "AnyKernel packaging must sanitize a restored checkout"
 grep -Fq 'install_anykernel_template "$ANYKERNEL_TEMPLATE" "$ANYKERNEL_SCRIPT"' "$ANYKERNEL_PACKAGE_SCRIPT" \
   || fail "AnyKernel packaging must install the device-specific flash template"
+grep -Fq 'patch_anykernel_app_flash_staging "$ANYKERNEL_UPDATE_BINARY"' "$ANYKERNEL_PACKAGE_SCRIPT" \
+  || fail "AnyKernel packaging must move app-triggered flashes out of non-executable app data"
 grep -Fq 'git checkout -q --force --detach FETCH_HEAD' "$ANYKERNEL_PACKAGE_SCRIPT" \
   || fail "AnyKernel packaging must force the pinned detached checkout"
 if grep -Fq 'Kernel-SU/AnyKernel3.git' "$RESOLVER_SCRIPT"; then
@@ -637,9 +639,11 @@ printf '%s\n' \
   'supported.versions=' \
   > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source/anykernel.sh"
 printf '%s\n' \
+  '[ "$AKHOME" ] || export AKHOME=$POSTINSTALL/tmp/anykernel;' \
   '  if [ ! "$match" ]; then' \
   '    abort " " "Unsupported device. Aborting...";' \
   '  fi;' \
+  'setup_bb;' \
   > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source/META-INF/com/google/android/update-binary"
 chmod 755 \
   "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source/anykernel.sh" \
@@ -697,6 +701,20 @@ for package_timestamp in 20260101_000000 20260101_000001; do
     || fail "AnyKernel packaging did not produce the flashable archive"
   test -s "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/release-assets/SHA256SUMS" \
     || fail "AnyKernel packaging did not produce checksums"
+  grep -Fq 'export AKHOME=/data/local/tmp/anykernel-$$;' \
+    "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/META-INF/com/google/android/update-binary" \
+    || fail "AnyKernel package does not use executable staging for app-triggered flashes"
+  grep -Fq 'AnyKernel work directory: $AKHOME' \
+    "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/META-INF/com/google/android/update-binary" \
+    || fail "AnyKernel package does not report its effective staging directory"
+  sh -n "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/META-INF/com/google/android/update-binary" \
+    || fail "AnyKernel app-flasher compatibility produced invalid shell syntax"
+  APP_FLASH_UPDATER_HASH="$(sha256sum "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/META-INF/com/google/android/update-binary" | cut -d' ' -f1)"
+  patch_anykernel_app_flash_staging \
+    "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/META-INF/com/google/android/update-binary"
+  assert_eq "$APP_FLASH_UPDATER_HASH" \
+    "$(sha256sum "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/META-INF/com/google/android/update-binary" | cut -d' ' -f1)" \
+    "AnyKernel app-flasher staging repair idempotence"
 done
 
 for i in "${!profiles[@]}"; do
