@@ -295,6 +295,7 @@ ANYKERNEL_FIXTURE="$(mktemp)"
 UPDATE_BINARY_FIXTURE="$(mktemp)"
 KPM_CONFIG_FIXTURE="$(mktemp)"
 ZEROMOUNT_CONFIG_FIXTURE="$(mktemp)"
+ZEROMOUNT_FIXTURE_DIR="$(mktemp -d)"
 MODULE_CONFIG_FIXTURE="$(mktemp)"
 SPINLOCK_KCONFIG_FIXTURE="$(mktemp)"
 KPM_VERIFY_FIXTURE="$(mktemp -d)"
@@ -303,7 +304,54 @@ EXTRACT_CERT_FIXTURE_DIR="$(mktemp -d)"
 ANYKERNEL_CACHE_FIXTURE_DIR="$(mktemp -d)"
 ANYKERNEL_PACKAGE_FIXTURE_DIR="$(mktemp -d)"
 SUSFS_VENDOR_FIXTURE_DIR="$(mktemp -d)"
-trap 'rm -f "$ANYKERNEL_FIXTURE" "$UPDATE_BINARY_FIXTURE" "$KPM_CONFIG_FIXTURE" "$ZEROMOUNT_CONFIG_FIXTURE" "$MODULE_CONFIG_FIXTURE" "$SPINLOCK_KCONFIG_FIXTURE"; rm -rf "$KPM_VERIFY_FIXTURE" "$NOMOUNT_FIXTURE_DIR" "$EXTRACT_CERT_FIXTURE_DIR" "$ANYKERNEL_CACHE_FIXTURE_DIR" "$ANYKERNEL_PACKAGE_FIXTURE_DIR" "$SUSFS_VENDOR_FIXTURE_DIR"' EXIT
+trap 'rm -f "$ANYKERNEL_FIXTURE" "$UPDATE_BINARY_FIXTURE" "$KPM_CONFIG_FIXTURE" "$ZEROMOUNT_CONFIG_FIXTURE" "$MODULE_CONFIG_FIXTURE" "$SPINLOCK_KCONFIG_FIXTURE"; rm -rf "$KPM_VERIFY_FIXTURE" "$NOMOUNT_FIXTURE_DIR" "$ZEROMOUNT_FIXTURE_DIR" "$EXTRACT_CERT_FIXTURE_DIR" "$ANYKERNEL_CACHE_FIXTURE_DIR" "$ANYKERNEL_PACKAGE_FIXTURE_DIR" "$SUSFS_VENDOR_FIXTURE_DIR"' EXIT
+
+mkdir -p "$ZEROMOUNT_FIXTURE_DIR/fs"
+cat > "$ZEROMOUNT_FIXTURE_DIR/fs/stat.c" <<'EOF'
+static int vfs_statx(int dfd, const char __user *filename, int flags,
+		     struct kstat *stat, u32 request_mask)
+{
+	int error;
+#ifdef CONFIG_KSU_SUSFS
+#ifdef CONFIG_ZEROMOUNT
+	if (filename)
+		return zeromount_stat_hook(dfd, filename, stat, request_mask, flags);
+#endif
+
+	struct filename *fname = NULL;
+#endif
+	return error;
+}
+EOF
+repair_zeromount_stat_declaration "$ZEROMOUNT_FIXTURE_DIR/fs/stat.c" >/dev/null
+ZEROMOUNT_DECLARATION_LINE="$(grep -nF $'\tstruct filename *fname = NULL;' "$ZEROMOUNT_FIXTURE_DIR/fs/stat.c" | cut -d: -f1)"
+ZEROMOUNT_HOOK_LINE="$(sed -n '/^static int vfs_statx(/,$p' "$ZEROMOUNT_FIXTURE_DIR/fs/stat.c" | grep -n -m1 '^#ifdef CONFIG_ZEROMOUNT$' | cut -d: -f1)"
+(( ZEROMOUNT_DECLARATION_LINE < ZEROMOUNT_HOOK_LINE )) \
+  || fail "ZeroMount compatibility repair did not move the declaration before executable code"
+ZEROMOUNT_REPAIRED_HASH="$(sha256sum "$ZEROMOUNT_FIXTURE_DIR/fs/stat.c" | cut -d' ' -f1)"
+repair_zeromount_stat_declaration "$ZEROMOUNT_FIXTURE_DIR/fs/stat.c" >/dev/null
+assert_eq \
+  "$ZEROMOUNT_REPAIRED_HASH" \
+  "$(sha256sum "$ZEROMOUNT_FIXTURE_DIR/fs/stat.c" | cut -d' ' -f1)" \
+  "ZeroMount declaration repair idempotence"
+cat > "$ZEROMOUNT_FIXTURE_DIR/fs/stat-6.1.c" <<'EOF'
+static int vfs_statx(int dfd, struct filename *filename, int flags,
+		     struct kstat *stat, u32 request_mask)
+{
+	int error;
+#ifdef CONFIG_ZEROMOUNT
+	if (filename)
+		return zeromount_stat_hook(dfd, filename, stat, request_mask, flags);
+#endif
+	return error;
+}
+EOF
+ZEROMOUNT_61_HASH="$(sha256sum "$ZEROMOUNT_FIXTURE_DIR/fs/stat-6.1.c" | cut -d' ' -f1)"
+repair_zeromount_stat_declaration "$ZEROMOUNT_FIXTURE_DIR/fs/stat-6.1.c" >/dev/null
+assert_eq \
+  "$ZEROMOUNT_61_HASH" \
+  "$(sha256sum "$ZEROMOUNT_FIXTURE_DIR/fs/stat-6.1.c" | cut -d' ' -f1)" \
+  "ZeroMount 6.1 declaration-free compatibility"
 
 mkdir -p "$SUSFS_VENDOR_FIXTURE_DIR/fs"
 cat > "$SUSFS_VENDOR_FIXTURE_DIR/fs/namespace.c" <<'EOF'

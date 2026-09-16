@@ -17,6 +17,66 @@ zeromount_patch_sha256() {
   esac
 }
 
+repair_zeromount_stat_declaration() {
+  local stat_file="${1:-fs/stat.c}"
+  local positions
+  local zeromount_guard_line
+  local declaration_line
+  local temp_file
+
+  positions="$(awk '
+    /^static int vfs_statx\(/ { in_vfs_statx = 1 }
+    in_vfs_statx && !zeromount_guard && /^#ifdef CONFIG_ZEROMOUNT$/ {
+      zeromount_guard = NR
+    }
+    in_vfs_statx && !declaration && /^[[:space:]]*struct filename \*fname = NULL;$/ {
+      declaration = NR
+    }
+    END { print zeromount_guard, declaration }
+  ' "$stat_file")"
+  read -r zeromount_guard_line declaration_line <<< "$positions"
+
+  if [[ -z "$zeromount_guard_line" ]]; then
+    echo "::error::Could not locate the ZeroMount vfs_statx hook in $stat_file."
+    return 1
+  fi
+  # Android 6.1 passes a struct filename into vfs_statx and has no local
+  # SUSFS fname declaration to relocate.
+  if [[ -z "$declaration_line" ]]; then
+    return 0
+  fi
+  if (( declaration_line < zeromount_guard_line )); then
+    return 0
+  fi
+
+  temp_file="$(mktemp "${stat_file}.zeromount.XXXXXX")"
+  if ! awk '
+    /^static int vfs_statx\(/ { in_vfs_statx = 1 }
+    in_vfs_statx && !inserted && /^#ifdef CONFIG_KSU_SUSFS$/ {
+      print
+      print "\tstruct filename *fname = NULL;"
+      inserted = 1
+      next
+    }
+    in_vfs_statx && /^[[:space:]]*struct filename \*fname = NULL;$/ {
+      removed++
+      next
+    }
+    { print }
+    END {
+      if (inserted != 1 || removed != 1)
+        exit 1
+    }
+  ' "$stat_file" > "$temp_file"; then
+    rm -f "$temp_file"
+    echo "::error::Failed to repair the ZeroMount declaration order in $stat_file."
+    return 1
+  fi
+  chmod --reference="$stat_file" "$temp_file"
+  mv "$temp_file" "$stat_file"
+  echo "[+] Moved the ZeroMount/SUSFS vfs_statx declaration before executable code."
+}
+
 install_zeromount() {
   local repo="$1"
   local commit="$2"
@@ -64,6 +124,11 @@ install_zeromount() {
     exit 1
   fi
   patch --batch --forward --fuzz=3 -p1 < "$patch_file"
+
+  # The pinned patches place SUSFS's fname declaration below the ZeroMount
+  # hook. Android kernels build as GNU89 with declaration-after-statement
+  # promoted to an error, so normalize that known combined-feature layout.
+  repair_zeromount_stat_declaration fs/stat.c
 
   if find . -type f -name '*.rej' -print -quit | grep -q .; then
     echo "::error::ZeroMount integration left patch reject files."
