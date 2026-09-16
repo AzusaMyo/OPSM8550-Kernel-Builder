@@ -98,6 +98,15 @@ if grep -Fq 'Kernel-SU/AnyKernel3.git' "$RESOLVER_SCRIPT"; then
 fi
 grep -Fq 'profile: SM8650 | OnePlus 12 | crDroid' "$UPSTREAM_HEALTH_WORKFLOW" \
   || fail "upstream health must exercise the crDroid SM8650 certificate compatibility path"
+grep -Fq 'integration: SukiSU Ultra + SUSFS + NoMount + KPM (experimental)' "$UPSTREAM_HEALTH_WORKFLOW" \
+  || fail "upstream health must exercise the featured KPM integration"
+awk '
+  /integration: SukiSU Ultra \+ SUSFS \+ NoMount \+ KPM \(experimental\)/ { kpm = 1; next }
+  kpm && /profile: SM8650 \| OnePlus 12 \| crDroid/ { found = 1; exit }
+  kpm && /integration:/ { kpm = 0 }
+  END { exit !found }
+' "$UPSTREAM_HEALTH_WORKFLOW" \
+  || fail "upstream health must exercise KPM on the crDroid OnePlus 12 source"
 
 expected_socs=(sm7550 sm7550 sm8450 sm8450 sm8550 sm8550 sm8550 sm8550 sm8550 sm8650 sm8650 sm8650)
 expected_upstream_socs=(sm8550 sm8550 sm8450 sm8450 sm8550 sm8550 sm8550 sm8550 sm8550 sm8650 sm8650 sm8650)
@@ -259,7 +268,45 @@ NOMOUNT_FIXTURE_DIR="$(mktemp -d)"
 EXTRACT_CERT_FIXTURE_DIR="$(mktemp -d)"
 ANYKERNEL_CACHE_FIXTURE_DIR="$(mktemp -d)"
 ANYKERNEL_PACKAGE_FIXTURE_DIR="$(mktemp -d)"
-trap 'rm -f "$ANYKERNEL_FIXTURE" "$UPDATE_BINARY_FIXTURE" "$KPM_CONFIG_FIXTURE" "$MODULE_CONFIG_FIXTURE" "$SPINLOCK_KCONFIG_FIXTURE"; rm -rf "$KPM_VERIFY_FIXTURE" "$NOMOUNT_FIXTURE_DIR" "$EXTRACT_CERT_FIXTURE_DIR" "$ANYKERNEL_CACHE_FIXTURE_DIR" "$ANYKERNEL_PACKAGE_FIXTURE_DIR"' EXIT
+SUSFS_VENDOR_FIXTURE_DIR="$(mktemp -d)"
+trap 'rm -f "$ANYKERNEL_FIXTURE" "$UPDATE_BINARY_FIXTURE" "$KPM_CONFIG_FIXTURE" "$MODULE_CONFIG_FIXTURE" "$SPINLOCK_KCONFIG_FIXTURE"; rm -rf "$KPM_VERIFY_FIXTURE" "$NOMOUNT_FIXTURE_DIR" "$EXTRACT_CERT_FIXTURE_DIR" "$ANYKERNEL_CACHE_FIXTURE_DIR" "$ANYKERNEL_PACKAGE_FIXTURE_DIR" "$SUSFS_VENDOR_FIXTURE_DIR"' EXIT
+
+mkdir -p "$SUSFS_VENDOR_FIXTURE_DIR/fs"
+cat > "$SUSFS_VENDOR_FIXTURE_DIR/fs/namespace.c" <<'EOF'
+#include <linux/mnt_idmapping.h>
+
+#include "pnode.h"
+#include "internal.h"
+
+/* Maximum number of mounts in a mount namespace */
+EOF
+cat > "$SUSFS_VENDOR_FIXTURE_DIR/fs/super.c" <<'EOF'
+#include <linux/fs_context.h>
+#include <uapi/linux/mount.h>
+#include "internal.h"
+
+static int thaw_super_locked(struct super_block *sb);
+EOF
+cat > "$SUSFS_VENDOR_FIXTURE_DIR/fs/namespace.c.rej" <<'EOF'
++#include <linux/susfs_def.h>
++extern struct static_key_true susfs_is_sdcard_android_data_not_decrypted;
+EOF
+cat > "$SUSFS_VENDOR_FIXTURE_DIR/fs/super.c.rej" <<'EOF'
++#include <linux/susfs_def.h>
++extern bool susfs_is_current_ksu_domain(void);
+EOF
+(
+  cd "$SUSFS_VENDOR_FIXTURE_DIR"
+  resolve_known_susfs_rejects >/dev/null
+)
+test ! -e "$SUSFS_VENDOR_FIXTURE_DIR/fs/namespace.c.rej" \
+  || fail "SM8650 SUSFS recovery left the namespace reject in place"
+test ! -e "$SUSFS_VENDOR_FIXTURE_DIR/fs/super.c.rej" \
+  || fail "SM8650 SUSFS recovery left the superblock reject in place"
+grep -Fq '#include <linux/susfs_def.h>' "$SUSFS_VENDOR_FIXTURE_DIR/fs/super.c" \
+  || fail "SM8650 SUSFS recovery did not add the superblock header"
+grep -Fq 'extern bool susfs_is_current_ksu_domain(void);' "$SUSFS_VENDOR_FIXTURE_DIR/fs/super.c" \
+  || fail "SM8650 SUSFS recovery did not add the superblock domain declaration"
 
 cat > "$EXTRACT_CERT_FIXTURE_DIR/extract-cert.c" <<'EOF'
 #include <openssl/engine.h>

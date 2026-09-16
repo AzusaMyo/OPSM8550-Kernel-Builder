@@ -64,6 +64,33 @@ apply_susfs_namespace_fix() {
   return 1
 }
 
+apply_susfs_super_fix() {
+  local file="fs/super.c"
+  local block
+
+  if grep -q '^#include <linux/susfs_def.h>$' "$file" && \
+     grep -q '^extern bool susfs_is_current_ksu_domain(void);$' "$file" && \
+     grep -q '^extern struct static_key_true susfs_is_sdcard_android_data_not_decrypted;$' "$file"; then
+    echo "[+] super.c already contains the susfs mount declarations."
+    return 0
+  fi
+
+  if grep -qE '^#include <linux/susfs_def.h>$|^extern bool susfs_is_current_ksu_domain\(void\);$|^extern struct static_key_true susfs_is_sdcard_android_data_not_decrypted;$' "$file"; then
+    echo "[-] Refusing to modify a partially applied susfs declaration block in $file."
+    return 1
+  fi
+
+  block=$'#ifdef CONFIG_KSU_SUSFS\n#include <linux/susfs_def.h>\n#endif // #ifdef CONFIG_KSU_SUSFS\n\n#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT\nextern bool susfs_is_current_ksu_domain(void);\nextern struct static_key_true susfs_is_sdcard_android_data_not_decrypted;\n#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT\n'
+
+  if insert_block_before_first_match "$file" 'static int thaw_super_locked(struct super_block *sb);' "$block" 'extern bool susfs_is_current_ksu_domain(void);'; then
+    echo "[+] Applied fallback susfs declaration fix to super.c."
+    return 0
+  fi
+
+  echo "[-] Could not find a stable insertion point in $file."
+  return 1
+}
+
 resolve_known_susfs_rejects() {
   local reject
   local unknown=0
@@ -79,6 +106,9 @@ resolve_known_susfs_rejects() {
         ;;
       ./fs/namespace.c.rej)
         grep -q 'susfs_def.h' "$reject" && apply_susfs_namespace_fix || unknown=1
+        ;;
+      ./fs/super.c.rej)
+        grep -q 'susfs_def.h' "$reject" && apply_susfs_super_fix || unknown=1
         ;;
       *)
         unknown=1

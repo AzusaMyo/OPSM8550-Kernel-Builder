@@ -223,8 +223,9 @@ Pushes and pull requests run:
 - actionlint for all workflow files
 
 `Check upstream health` runs every Monday and can also be started manually. It
-resolves exact commits for all twelve profiles, then runs a seventeen-job
-smoke-test matrix: KernelSU-Next + SUSFS, SukiSU Ultra + SUSFS + NoMount + KPM,
+resolves exact commits for all twelve profiles, then runs an eighteen-job
+smoke-test matrix: KernelSU-Next + SUSFS, SukiSU Ultra + SUSFS + NoMount + KPM
+(including the crDroid OnePlus 12 / Android 6.1 vendor include drift),
 and ReSukiSU + SUSFS + NoMount are validated on representative SM7550 (including
 both CE4 source families), SM8450, SM8550, and SM8650 sources, with an additional
 baseline validation for the LunarisOS OnePlus 11 and crDroid OnePlus 12 sources.
