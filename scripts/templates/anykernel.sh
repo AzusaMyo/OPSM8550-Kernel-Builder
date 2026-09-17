@@ -39,6 +39,10 @@ PATCH_VBMETA_FLAG=auto;
 . tools/ak3-core.sh;
 
 # Preserve the existing ramdisk and replace only the kernel Image.
+ui_print "Stage 1/3: dumping and unpacking boot image...";
 dump_boot;
+ui_print "Stage 2/3: boot image unpacked; replacing kernel...";
+ui_print "Stage 3/3: repacking and flashing boot image...";
 write_boot;
+ui_print "Boot image flash completed.";
 ## end boot install

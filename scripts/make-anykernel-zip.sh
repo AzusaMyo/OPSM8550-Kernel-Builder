@@ -113,6 +113,7 @@ if [[ "$KPM_ENABLED" == true ]]; then
     "$MAGISKBOOT_ARM64_SHA256" \
     "AnyKernel3/tools/magiskboot" \
     "$MAGISK_APK_PATH"
+  prepare_anykernel_arm64_toolset "AnyKernel3/tools"
   ANYKERNEL_BUSYBOX_ABI="arm64"
 fi
 ANYKERNEL_BUSYBOX_SHA256="$(sha256sum AnyKernel3/tools/busybox | awk '{print $1}')"

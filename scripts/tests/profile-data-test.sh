@@ -102,6 +102,8 @@ grep -Fq 'install_anykernel_arm64_busybox "$KSU_ARM64_BUSYBOX" "AnyKernel3/tools
   || fail "KPM packaging must replace AnyKernel's legacy ARM BusyBox"
 grep -Fq 'install_anykernel_arm64_magiskboot \' "$ANYKERNEL_PACKAGE_SCRIPT" \
   || fail "KPM packaging must replace AnyKernel's legacy ARM MagiskBoot"
+grep -Fq 'prepare_anykernel_arm64_toolset "AnyKernel3/tools"' "$ANYKERNEL_PACKAGE_SCRIPT" \
+  || fail "KPM packaging must reject remaining non-AArch64 runtime tools"
 grep -Fq 'add_anykernel_preflight_diagnostics \' "$ANYKERNEL_PACKAGE_SCRIPT" \
   || fail "AnyKernel packaging must report the device and BusyBox ABIs"
 grep -Fq 'git checkout -q --force --detach FETCH_HEAD' "$ANYKERNEL_PACKAGE_SCRIPT" \
@@ -404,6 +406,10 @@ grep -Fxq 'BLOCK=boot;' "$ANYKERNEL_TEMPLATE_FIXTURE" \
   || fail "AnyKernel device template does not target boot by partition name"
 grep -Fxq 'IS_SLOT_DEVICE=1;' "$ANYKERNEL_TEMPLATE_FIXTURE" \
   || fail "AnyKernel device template does not enable A/B slot detection"
+grep -Fq 'Stage 1/3: dumping and unpacking boot image' "$ANYKERNEL_TEMPLATE_FIXTURE" \
+  || fail "AnyKernel device template does not report the dump stage"
+grep -Fq 'Stage 3/3: repacking and flashing boot image' "$ANYKERNEL_TEMPLATE_FIXTURE" \
+  || fail "AnyKernel device template does not report the flash stage"
 if grep -Eq 'omap_hsmmc|maguro|toro|tuna' "$ANYKERNEL_TEMPLATE_FIXTURE"; then
   fail "AnyKernel device template retained an upstream example-device setting"
 fi
@@ -656,6 +662,9 @@ printf '%s\n' \
   > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source/META-INF/com/google/android/update-binary"
 printf '%s\n' upstream-arm-busybox > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source/tools/busybox"
 printf '%s\n' upstream-arm-magiskboot > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source/tools/magiskboot"
+for optional_tool in fec httools_static lptools_static magiskpolicy snapshotupdater_static; do
+  printf '%s\n' upstream-arm-optional > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source/tools/$optional_tool"
+done
 chmod 755 \
   "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source/anykernel.sh" \
   "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source/META-INF/com/google/android/update-binary" \
@@ -745,6 +754,10 @@ for package_timestamp in 20260101_000000 20260101_000001; do
   assert_eq "755" \
     "$(stat -c '%a' "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/tools/magiskboot")" \
     "KPM AnyKernel arm64 MagiskBoot permissions"
+  for optional_tool in fec httools_static lptools_static magiskpolicy snapshotupdater_static; do
+    test ! -e "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/tools/$optional_tool" \
+      || fail "KPM AnyKernel retained incompatible optional tool: $optional_tool"
+  done
   grep -Fq '[ "$AKHOME" ] || export AKHOME=$POSTINSTALL/tmp/anykernel;' \
     "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/META-INF/com/google/android/update-binary" \
     || fail "AnyKernel package changed upstream work-directory handling"

@@ -232,6 +232,36 @@ install_anykernel_arm64_magiskboot() {
   )
 }
 
+prepare_anykernel_arm64_toolset() {
+  local tools_dir="$1"
+  local file
+  local elf_header
+
+  # This package only modifies boot. These optional AnyKernel tools target
+  # other partition types and the canonical checkout currently ships ARM32
+  # builds that cannot execute on arm64-only SoCs.
+  rm -f \
+    "$tools_dir/fec" \
+    "$tools_dir/httools_static" \
+    "$tools_dir/lptools_static" \
+    "$tools_dir/magiskpolicy" \
+    "$tools_dir/snapshotupdater_static"
+
+  for file in "$tools_dir"/*; do
+    [[ -f "$file" ]] || continue
+    if elf_header="$(readelf -h "$file" 2>/dev/null)"; then
+      grep -Eq 'Class:[[:space:]]+ELF64' <<< "$elf_header" || {
+        echo "::error::AnyKernel contains a non-ELF64 runtime tool: $file"
+        return 1
+      }
+      grep -Eq 'Machine:[[:space:]]+AArch64' <<< "$elf_header" || {
+        echo "::error::AnyKernel contains a non-AArch64 runtime tool: $file"
+        return 1
+      }
+    fi
+  done
+}
+
 add_anykernel_preflight_diagnostics() {
   local file="$1"
   local busybox_abi="$2"

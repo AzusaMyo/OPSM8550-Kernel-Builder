@@ -192,7 +192,9 @@ source revision used by the build; MagiskBoot comes from a pinned official
 Magisk APK with both archive and extracted-binary SHA-256 verification. On
 arm64-only SoCs such as the Snapdragon 8 Gen 3 in OnePlus 12, the installer
 also discards the manager app's incompatible ARM32 `mkbootfs` injection and
-uses BusyBox `cpio` instead.
+uses BusyBox `cpio` instead. Other unused ARM32 AnyKernel partition utilities
+are removed, and packaging fails if any remaining native runtime tool is not
+ELF64/AArch64.
 
 Each full build produces `release-assets/` containing:
 
