@@ -65,6 +65,26 @@ install_anykernel_template() {
     echo "::error::AnyKernel template does not require A/B slot detection."
     return 1
   }
+  grep -Fxq 'SLOT_SELECT=active;' "$destination" || {
+    echo "::error::AnyKernel template does not force the active slot."
+    return 1
+  }
+  grep -Fxq 'PATCH_VBMETA_FLAG=0;' "$destination" || {
+    echo "::error::AnyKernel template does not preserve the existing boot vbmeta flag."
+    return 1
+  }
+  grep -Fxq 'NO_MAGISK_CHECK=1;' "$destination" || {
+    echo "::error::AnyKernel template does not disable unnecessary ramdisk-root detection."
+    return 1
+  }
+  grep -Fxq 'NO_VBMETA_PARTITION_PATCH=1;' "$destination" || {
+    echo "::error::AnyKernel template does not protect the standalone vbmeta partition."
+    return 1
+  }
+  grep -Fq 'Active-slot boot target verification failed' "$destination" || {
+    echo "::error::AnyKernel template does not verify its resolved active-slot boot target."
+    return 1
+  }
   grep -Fxq 'split_boot;' "$destination" || {
     echo "::error::AnyKernel template does not split the existing boot image."
     return 1

@@ -32,11 +32,27 @@ set_perm_recursive 0 0 750 750 $RAMDISK/init* $RAMDISK/sbin;
 # resolve the selected slot through the device's by-name links.
 BLOCK=boot;
 IS_SLOT_DEVICE=1;
+SLOT_SELECT=active;
 RAMDISK_COMPRESSION=auto;
-PATCH_VBMETA_FLAG=auto;
+PATCH_VBMETA_FLAG=0;
+NO_MAGISK_CHECK=1;
+NO_VBMETA_PARTITION_PATCH=1;
 
 # Import functions/variables and resolve the target boot slot.
 . tools/ak3-core.sh;
+
+# Never let a booted flasher or a stale /postinstall mount redirect this
+# kernel-only package to the inactive slot.  Its init_boot/vendor_boot pair may
+# belong to a different ROM build and cannot safely be mixed with this kernel.
+case "$SLOT:$BLOCK" in
+  _a:*boot_a|_b:*boot_b)
+    ui_print "Target slot verified: $SLOT";
+    ui_print "Target boot partition: $BLOCK";
+    ;;
+  *)
+    abort "Active-slot boot target verification failed: slot=$SLOT block=$BLOCK";
+    ;;
+esac;
 
 # Preserve the boot image layout and replace only the kernel Image.  Modern
 # devices such as OnePlus 11 keep their first-stage ramdisk in init_boot, so

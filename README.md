@@ -183,9 +183,10 @@ or regenerate every cached input.
 Generated AnyKernel3 ZIPs enable `do.devicecheck=1` and contain only the
 device-specific codenames and stock board IDs assigned to the selected profile.
 Android version checking is also enabled when the selected branch identifies a
-known Android generation. The installer targets the slot-aware `boot` partition
-by name, splits and rebuilds the boot image without unpacking its ramdisk, and
-replaces only the kernel Image. This supports newer devices such as OnePlus 11,
+known Android generation. The installer targets the current active `boot`
+partition by name, refuses to continue unless the resolved `boot_a`/`boot_b`
+path matches that slot, splits and rebuilds the boot image without unpacking
+its ramdisk, and replaces only the kernel Image. This supports newer devices such as OnePlus 11,
 where the first-stage ramdisk lives in `init_boot` and `boot` legitimately has
 no ramdisk, while preserving a boot ramdisk when one is present. Upstream
 AnyKernel example-device paths and demo ramdisk edits are not included. KPM

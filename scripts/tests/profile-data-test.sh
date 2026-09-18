@@ -314,8 +314,9 @@ NOMOUNT_FIXTURE_DIR="$(mktemp -d)"
 EXTRACT_CERT_FIXTURE_DIR="$(mktemp -d)"
 ANYKERNEL_CACHE_FIXTURE_DIR="$(mktemp -d)"
 ANYKERNEL_PACKAGE_FIXTURE_DIR="$(mktemp -d)"
+ANYKERNEL_SLOT_FIXTURE_DIR="$(mktemp -d)"
 SUSFS_VENDOR_FIXTURE_DIR="$(mktemp -d)"
-trap 'rm -f "$ANYKERNEL_FIXTURE" "$UPDATE_BINARY_FIXTURE" "$APP_STAGING_FIXTURE" "$KPM_CONFIG_FIXTURE" "$ZEROMOUNT_CONFIG_FIXTURE" "$MODULE_CONFIG_FIXTURE" "$SPINLOCK_KCONFIG_FIXTURE"; rm -rf "$KPM_VERIFY_FIXTURE" "$NOMOUNT_FIXTURE_DIR" "$ZEROMOUNT_FIXTURE_DIR" "$EXTRACT_CERT_FIXTURE_DIR" "$ANYKERNEL_CACHE_FIXTURE_DIR" "$ANYKERNEL_PACKAGE_FIXTURE_DIR" "$SUSFS_VENDOR_FIXTURE_DIR"' EXIT
+trap 'rm -f "$ANYKERNEL_FIXTURE" "$UPDATE_BINARY_FIXTURE" "$APP_STAGING_FIXTURE" "$KPM_CONFIG_FIXTURE" "$ZEROMOUNT_CONFIG_FIXTURE" "$MODULE_CONFIG_FIXTURE" "$SPINLOCK_KCONFIG_FIXTURE"; rm -rf "$KPM_VERIFY_FIXTURE" "$NOMOUNT_FIXTURE_DIR" "$ZEROMOUNT_FIXTURE_DIR" "$EXTRACT_CERT_FIXTURE_DIR" "$ANYKERNEL_CACHE_FIXTURE_DIR" "$ANYKERNEL_PACKAGE_FIXTURE_DIR" "$ANYKERNEL_SLOT_FIXTURE_DIR" "$SUSFS_VENDOR_FIXTURE_DIR"' EXIT
 
 mkdir -p "$ZEROMOUNT_FIXTURE_DIR/fs"
 cat > "$ZEROMOUNT_FIXTURE_DIR/fs/stat.c" <<'EOF'
@@ -409,6 +410,16 @@ grep -Fxq 'BLOCK=boot;' "$ANYKERNEL_TEMPLATE_FIXTURE" \
   || fail "AnyKernel device template does not target boot by partition name"
 grep -Fxq 'IS_SLOT_DEVICE=1;' "$ANYKERNEL_TEMPLATE_FIXTURE" \
   || fail "AnyKernel device template does not enable A/B slot detection"
+grep -Fxq 'SLOT_SELECT=active;' "$ANYKERNEL_TEMPLATE_FIXTURE" \
+  || fail "AnyKernel device template does not pin flashing to the active slot"
+grep -Fxq 'PATCH_VBMETA_FLAG=0;' "$ANYKERNEL_TEMPLATE_FIXTURE" \
+  || fail "AnyKernel device template does not preserve the boot vbmeta flag"
+grep -Fxq 'NO_MAGISK_CHECK=1;' "$ANYKERNEL_TEMPLATE_FIXTURE" \
+  || fail "AnyKernel device template does not skip unnecessary Magisk ramdisk handling"
+grep -Fxq 'NO_VBMETA_PARTITION_PATCH=1;' "$ANYKERNEL_TEMPLATE_FIXTURE" \
+  || fail "AnyKernel device template does not protect the standalone vbmeta partition"
+grep -Fq 'Active-slot boot target verification failed' "$ANYKERNEL_TEMPLATE_FIXTURE" \
+  || fail "AnyKernel device template does not verify the resolved active-slot boot target"
 grep -Fxq 'split_boot;' "$ANYKERNEL_TEMPLATE_FIXTURE" \
   || fail "AnyKernel device template does not support ramdiskless boot images"
 grep -Fxq 'flash_boot;' "$ANYKERNEL_TEMPLATE_FIXTURE" \
@@ -423,6 +434,42 @@ grep -Fq 'Stage 3/3: rebuilding and flashing boot image' "$ANYKERNEL_TEMPLATE_FI
 if grep -Eq 'omap_hsmmc|maguro|toro|tuna' "$ANYKERNEL_TEMPLATE_FIXTURE"; then
   fail "AnyKernel device template retained an upstream example-device setting"
 fi
+
+mkdir -p "$ANYKERNEL_SLOT_FIXTURE_DIR/tools"
+cp "$ANYKERNEL_TEMPLATE_FIXTURE" "$ANYKERNEL_SLOT_FIXTURE_DIR/anykernel.sh"
+cat > "$ANYKERNEL_SLOT_FIXTURE_DIR/tools/ak3-core.sh" <<'EOF'
+ui_print() { :; }
+abort() {
+  printf '%s\n' "$*"
+  exit 97
+}
+SLOT="${TEST_RESOLVED_SLOT:?}"
+BLOCK="${TEST_RESOLVED_BLOCK:?}"
+split_boot() { printf '%s\n' split >> "$TEST_TRACE"; }
+flash_boot() { printf '%s\n' flash >> "$TEST_TRACE"; }
+EOF
+SLOT_TRACE="$ANYKERNEL_SLOT_FIXTURE_DIR/trace"
+(
+  cd "$ANYKERNEL_SLOT_FIXTURE_DIR"
+  TEST_RESOLVED_SLOT=_a \
+    TEST_RESOLVED_BLOCK=/dev/block/by-name/boot_a \
+    TEST_TRACE="$SLOT_TRACE" \
+    sh anykernel.sh
+)
+assert_eq $'split\nflash' "$(cat "$SLOT_TRACE")" \
+  "AnyKernel verified active-slot flash path"
+rm -f "$SLOT_TRACE"
+if (
+  cd "$ANYKERNEL_SLOT_FIXTURE_DIR"
+  TEST_RESOLVED_SLOT=_a \
+    TEST_RESOLVED_BLOCK=/dev/block/by-name/boot_b \
+    TEST_TRACE="$SLOT_TRACE" \
+    sh anykernel.sh >/dev/null 2>&1
+); then
+  fail "AnyKernel accepted an inactive-slot boot target"
+fi
+test ! -e "$SLOT_TRACE" \
+  || fail "AnyKernel started modifying boot before rejecting an inactive-slot target"
 rm -f "$ANYKERNEL_TEMPLATE_FIXTURE"
 
 printf '%s\n' \
@@ -789,6 +836,12 @@ for package_timestamp in 20260101_000000 20260101_000001; do
   grep -Fxq 'flash_boot;' \
     "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/anykernel.sh" \
     || fail "AnyKernel package does not flash ramdiskless boot images"
+  grep -Fxq 'SLOT_SELECT=active;' \
+    "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/anykernel.sh" \
+    || fail "AnyKernel package does not force active-slot flashing"
+  grep -Fq 'Active-slot boot target verification failed' \
+    "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/anykernel.sh" \
+    || fail "AnyKernel package does not verify the resolved active-slot boot target"
   if grep -Eq '^[[:space:]]*(dump_boot|write_boot);' \
     "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/anykernel.sh"; then
     fail "AnyKernel package still attempts to unpack a boot ramdisk"
