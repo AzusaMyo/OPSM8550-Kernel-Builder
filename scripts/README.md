@@ -46,9 +46,9 @@ Shell implementation used by the GitHub Actions workflows.
   the versioned VFS patch checksum, and preflights it before applying it after
   SUSFS.
 - `lib/verify.sh` performs source, config, hook-mode, and binary verification,
-  including an LTO-aware `llvm-nm` check of the compiled KPM resolver and a
-  `vmlinux.symvers` check for the external-module ABI, plus dedicated KPM,
-  SUSFS, NoMount, ZeroMount, and external-module proofs.
+  including an LTO-aware `llvm-nm` check of the compiled KPM resolver, plus
+  dedicated KPM, SUSFS, NoMount, and ZeroMount proofs. Full builds also verify
+  that the final `Image` release suffix identifies the pinned kernel commit.
 
 ## Tests
 

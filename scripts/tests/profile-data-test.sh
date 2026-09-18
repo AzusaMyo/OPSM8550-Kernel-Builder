@@ -308,7 +308,7 @@ KPM_CONFIG_FIXTURE="$(mktemp)"
 ZEROMOUNT_CONFIG_FIXTURE="$(mktemp)"
 ZEROMOUNT_FIXTURE_DIR="$(mktemp -d)"
 MODULE_CONFIG_FIXTURE="$(mktemp)"
-SPINLOCK_KCONFIG_FIXTURE="$(mktemp)"
+SCMVERSION_FIXTURE="$(mktemp)"
 KPM_VERIFY_FIXTURE="$(mktemp -d)"
 NOMOUNT_FIXTURE_DIR="$(mktemp -d)"
 EXTRACT_CERT_FIXTURE_DIR="$(mktemp -d)"
@@ -316,7 +316,7 @@ ANYKERNEL_CACHE_FIXTURE_DIR="$(mktemp -d)"
 ANYKERNEL_PACKAGE_FIXTURE_DIR="$(mktemp -d)"
 ANYKERNEL_SLOT_FIXTURE_DIR="$(mktemp -d)"
 SUSFS_VENDOR_FIXTURE_DIR="$(mktemp -d)"
-trap 'rm -f "$ANYKERNEL_FIXTURE" "$UPDATE_BINARY_FIXTURE" "$APP_STAGING_FIXTURE" "$KPM_CONFIG_FIXTURE" "$ZEROMOUNT_CONFIG_FIXTURE" "$MODULE_CONFIG_FIXTURE" "$SPINLOCK_KCONFIG_FIXTURE"; rm -rf "$KPM_VERIFY_FIXTURE" "$NOMOUNT_FIXTURE_DIR" "$ZEROMOUNT_FIXTURE_DIR" "$EXTRACT_CERT_FIXTURE_DIR" "$ANYKERNEL_CACHE_FIXTURE_DIR" "$ANYKERNEL_PACKAGE_FIXTURE_DIR" "$ANYKERNEL_SLOT_FIXTURE_DIR" "$SUSFS_VENDOR_FIXTURE_DIR"' EXIT
+trap 'rm -f "$ANYKERNEL_FIXTURE" "$UPDATE_BINARY_FIXTURE" "$APP_STAGING_FIXTURE" "$KPM_CONFIG_FIXTURE" "$ZEROMOUNT_CONFIG_FIXTURE" "$MODULE_CONFIG_FIXTURE" "$SCMVERSION_FIXTURE"; rm -rf "$KPM_VERIFY_FIXTURE" "$NOMOUNT_FIXTURE_DIR" "$ZEROMOUNT_FIXTURE_DIR" "$EXTRACT_CERT_FIXTURE_DIR" "$ANYKERNEL_CACHE_FIXTURE_DIR" "$ANYKERNEL_PACKAGE_FIXTURE_DIR" "$ANYKERNEL_SLOT_FIXTURE_DIR" "$SUSFS_VENDOR_FIXTURE_DIR"' EXIT
 
 mkdir -p "$ZEROMOUNT_FIXTURE_DIR/fs"
 cat > "$ZEROMOUNT_FIXTURE_DIR/fs/stat.c" <<'EOF'
@@ -488,13 +488,13 @@ APP_PRIVATE_AKHOME="$(
 [[ "$APP_PRIVATE_AKHOME" == /data/local/tmp/anykernel-* ]] \
   || fail "AnyKernel did not replace an app-private AKHOME: $APP_PRIVATE_AKHOME"
 APP_PRIVATE_POSTINSTALL="$(
-  AKHOME= \
+  AKHOME='' \
     POSTINSTALL=/data/user/0/com.sukisu.ultra/files \
     sh "$APP_STAGING_FIXTURE"
 )"
 [[ "$APP_PRIVATE_POSTINSTALL" == /data/local/tmp/anykernel-* ]] \
   || fail "AnyKernel did not replace an app-private POSTINSTALL: $APP_PRIVATE_POSTINSTALL"
-RECOVERY_AKHOME="$(AKHOME= POSTINSTALL=/postinstall sh "$APP_STAGING_FIXTURE")"
+RECOVERY_AKHOME="$(AKHOME='' POSTINSTALL=/postinstall sh "$APP_STAGING_FIXTURE")"
 assert_eq "/postinstall/tmp/anykernel" "$RECOVERY_AKHOME" \
   "AnyKernel recovery staging path"
 APP_STAGING_HASH="$(sha256sum "$APP_STAGING_FIXTURE" | cut -d' ' -f1)"
@@ -554,15 +554,6 @@ mkdir -p \
   "$KPM_VERIFY_FIXTURE/toolchain"
 : > "$KPM_VERIFY_FIXTURE/out/drivers/kernelsu/infra/symbol_resolver.o"
 printf '%s\n' '0000000000001000 T sukisu_handle_kpm' > "$KPM_VERIFY_FIXTURE/out/System.map"
-printf '%s\n' \
-  'CONFIG_MODULES=y' \
-  'CONFIG_MODULE_UNLOAD=y' \
-  'CONFIG_MODVERSIONS=y' \
-  'CONFIG_MODULE_FORCE_LOAD=y' \
-  'CONFIG_KASAN=y' \
-  'CONFIG_KASAN_HW_TAGS=y' \
-  '# CONFIG_TRIM_UNUSED_KSYMS is not set' \
-  > "$KPM_VERIFY_FIXTURE/out/.config"
 cat > "$KPM_VERIFY_FIXTURE/toolchain/llvm-nm" <<'EOF'
 #!/usr/bin/env bash
 case "${*: -1}" in
@@ -589,15 +580,6 @@ chmod +x "$KPM_VERIFY_FIXTURE/toolchain/llvm-nm"
   verify_kpm_binary_presence >/dev/null
   grep -Fq 'T find_kernel_symbol_exact' kpm-proof.txt \
     || fail "KPM proof does not record the leaf resolver definition"
-  printf '%s\n' \
-    '0x11111111 module_layout vmlinux EXPORT_SYMBOL' \
-    '0x22222222 _raw_spin_lock vmlinux EXPORT_SYMBOL' \
-    '0x33333333 _raw_spin_unlock vmlinux EXPORT_SYMBOL' \
-    '0x44444444 kasan_flag_enabled vmlinux EXPORT_SYMBOL' \
-    > out/vmlinux.symvers
-  verify_external_module_exports >/dev/null
-  grep -Fq 'kasan_flag_enabled' external-module-proof.txt \
-    || fail "external module proof does not record the required exports"
 )
 
 KSU_TYPE="SukiSU-Ultra-with-susfs-nomount-KPM"
@@ -635,55 +617,36 @@ CONFIG_KASAN_GENERIC=y
 CONFIG_KASAN_SW_TAGS=y
 # CONFIG_KASAN_HW_TAGS is not set
 EOF
+MODULE_CONFIG_HASH="$(sha256sum "$MODULE_CONFIG_FIXTURE" | cut -d' ' -f1)"
+MODULE_ABI_PATTERN='^(CONFIG|# CONFIG)_(MODULES|MODULE_UNLOAD|MODVERSIONS|MODULE_FORCE_LOAD|ARCH_INLINE_SPIN_LOCK|ARCH_INLINE_SPIN_UNLOCK|INLINE_SPIN_LOCK|UNINLINE_SPIN_UNLOCK|TRIM_UNUSED_KSYMS|KASAN|KASAN_GENERIC|KASAN_SW_TAGS|KASAN_HW_TAGS)'
+MODULE_ABI_SNAPSHOT="$(grep -E "$MODULE_ABI_PATTERN" "$MODULE_CONFIG_FIXTURE")"
 KSU_TYPE="None"
 apply_variant_configs "$MODULE_CONFIG_FIXTURE"
-for module_config in \
-  CONFIG_MODULES \
-  CONFIG_MODULE_UNLOAD \
-  CONFIG_MODVERSIONS \
-  CONFIG_MODULE_FORCE_LOAD \
-  CONFIG_UNINLINE_SPIN_UNLOCK \
-  CONFIG_KASAN \
-  CONFIG_KASAN_HW_TAGS; do
-  grep -q "^${module_config}=y$" "$MODULE_CONFIG_FIXTURE" \
-    || fail "external module compatibility config ${module_config}"
-done
-grep -q '^# CONFIG_TRIM_UNUSED_KSYMS is not set$' "$MODULE_CONFIG_FIXTURE" \
-  || fail "external module exports must not be trimmed"
-for inline_config in \
-  CONFIG_ARCH_INLINE_SPIN_LOCK \
-  CONFIG_ARCH_INLINE_SPIN_UNLOCK \
-  CONFIG_INLINE_SPIN_LOCK; do
-  grep -q "^# ${inline_config} is not set$" "$MODULE_CONFIG_FIXTURE" \
-    || fail "external module compatibility must disable ${inline_config}"
-done
-grep -q '^# CONFIG_KASAN_GENERIC is not set$' "$MODULE_CONFIG_FIXTURE" \
-  || fail "generic KASAN must not override hardware-tag KASAN"
-grep -q '^# CONFIG_KASAN_SW_TAGS is not set$' "$MODULE_CONFIG_FIXTURE" \
-  || fail "software-tag KASAN must not override hardware-tag KASAN"
-grep -Fq 'verify_external_module_exports' "$COMPILE_SCRIPT" \
-  || fail "full builds do not verify external module exports"
-grep -Fq 'enable_external_module_spinlock_exports arch/arm64/Kconfig' "$COMPILE_SCRIPT" \
-  || fail "builds do not make the raw spin functions exportable"
-
-cat > "$SPINLOCK_KCONFIG_FIXTURE" <<'EOF'
-config ARM64
-	bool "ARM64"
-	select ARCH_INLINE_SPIN_LOCK
-	select ARCH_INLINE_SPIN_LOCK_BH
-	select ARCH_INLINE_SPIN_UNLOCK
-	select ARCH_INLINE_SPIN_UNLOCK_BH
-EOF
-enable_external_module_spinlock_exports "$SPINLOCK_KCONFIG_FIXTURE" >/dev/null
-enable_external_module_spinlock_exports "$SPINLOCK_KCONFIG_FIXTURE" >/dev/null
-grep -Fq 'select ARCH_INLINE_SPIN_LOCK_BH' "$SPINLOCK_KCONFIG_FIXTURE" \
-  || fail "spinlock compatibility patch must preserve the BH inline selection"
-grep -Fq 'select ARCH_INLINE_SPIN_UNLOCK_BH' "$SPINLOCK_KCONFIG_FIXTURE" \
-  || fail "spinlock compatibility patch must preserve the unlock-BH inline selection"
-grep -Eq '^[[:space:]]*select UNINLINE_SPIN_UNLOCK[[:space:]]*$' "$SPINLOCK_KCONFIG_FIXTURE" \
-  || fail "spinlock compatibility patch must select the out-of-line unlock"
-if grep -Eq '^[[:space:]]*select ARCH_INLINE_SPIN_(LOCK|UNLOCK)[[:space:]]*$' "$SPINLOCK_KCONFIG_FIXTURE"; then
-  fail "spinlock compatibility patch did not disable the plain inline selections"
+assert_eq "$MODULE_CONFIG_HASH" \
+  "$(sha256sum "$MODULE_CONFIG_FIXTURE" | cut -d' ' -f1)" \
+  "no-root preset must preserve vendor ABI-sensitive configs byte for byte"
+KSU_TYPE="SukiSU-Ultra-with-susfs-nomount-KPM"
+apply_variant_configs "$MODULE_CONFIG_FIXTURE"
+assert_eq "$MODULE_ABI_SNAPSHOT" \
+  "$(grep -E "$MODULE_ABI_PATTERN" "$MODULE_CONFIG_FIXTURE")" \
+  "root presets must preserve vendor ABI-sensitive configs"
+grep -Fq 'write_kernel_scmversion "$KERNEL_COMMIT"' "$COMPILE_SCRIPT" \
+  || fail "full builds do not pin the ROM-compatible kernel release suffix"
+if grep -Fq 'touch .scmversion' "$COMPILE_SCRIPT"; then
+  fail "full builds still erase the kernel source identity from vermagic"
+fi
+write_kernel_scmversion \
+  0123456789abcdef0123456789abcdef01234567 \
+  "$SCMVERSION_FIXTURE"
+assert_eq '-g0123456789ab' "$(cat "$SCMVERSION_FIXTURE")" \
+  "kernel source identity suffix"
+verify_kernel_release_identity \
+  '5.15.211-g0123456789ab' \
+  0123456789abcdef0123456789abcdef01234567
+if verify_kernel_release_identity \
+  '5.15.211' \
+  0123456789abcdef0123456789abcdef01234567 >/dev/null 2>&1; then
+  fail "kernel release verification accepted a missing source identity"
 fi
 
 printf '%s\n' \

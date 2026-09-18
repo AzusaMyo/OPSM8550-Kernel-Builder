@@ -119,7 +119,6 @@ CONFIG_STARTED_AT="$(date +%s)"
 BUILD_PHASE="source integration"
 
 repair_extract_cert_key_pass_guard certs/extract-cert.c
-enable_external_module_spinlock_exports arch/arm64/Kconfig
 install_ksu_variant "${KSU_TYPE}"
 
 if [[ "$KSU_TYPE" == *KPM* ]]; then
@@ -150,7 +149,10 @@ if [[ "$KSU_TYPE" == *nomount* ]]; then
   verify_nomount_source_integration
 fi
 
-touch .scmversion
+# Match the ROM kernel's CONFIG_LOCALVERSION_AUTO result without inheriting the
+# intentionally dirty integration worktree. Vendor modules include this release
+# string in vermagic and fail during early boot when the source identity is lost.
+write_kernel_scmversion "$KERNEL_COMMIT"
 
 ACTIVE_BUILD_CONFIGS="${BUILD_CONFIGS}"
 if [[ "$SOURCE_LAYOUT" == "oneplus-official" ]]; then
@@ -167,16 +169,6 @@ make "${MAKE_ARGS[@]}" olddefconfig
 require_config_enabled  out/.config CONFIG_MODULES
 require_config_enabled  out/.config CONFIG_MODULE_UNLOAD
 require_config_enabled  out/.config CONFIG_MODVERSIONS
-require_config_enabled  out/.config CONFIG_MODULE_FORCE_LOAD
-require_config_enabled  out/.config CONFIG_UNINLINE_SPIN_UNLOCK
-require_config_enabled  out/.config CONFIG_KASAN
-require_config_enabled  out/.config CONFIG_KASAN_HW_TAGS
-require_config_disabled out/.config CONFIG_TRIM_UNUSED_KSYMS
-require_config_disabled out/.config CONFIG_ARCH_INLINE_SPIN_LOCK
-require_config_disabled out/.config CONFIG_ARCH_INLINE_SPIN_UNLOCK
-require_config_disabled out/.config CONFIG_INLINE_SPIN_LOCK
-require_config_disabled out/.config CONFIG_KASAN_GENERIC
-require_config_disabled out/.config CONFIG_KASAN_SW_TAGS
 
 if [[ "$KSU_TYPE" != "None" ]]; then
   require_config_enabled out/.config CONFIG_KSU
@@ -291,7 +283,13 @@ fi
 COMPILE_SECONDS=$(($(date +%s) - COMPILE_STARTED_AT))
 
 BUILD_PHASE="post-build verification"
-verify_external_module_exports
+KERNEL_RELEASE="$(make -s "${MAKE_ARGS[@]}" kernelrelease)"
+verify_kernel_release_identity "$KERNEL_RELEASE" "$KERNEL_COMMIT"
+if ! strings out/arch/arm64/boot/Image | grep -F "Linux version ${KERNEL_RELEASE} " >/dev/null; then
+  echo "::error::Built Image banner does not contain the verified kernel release: ${KERNEL_RELEASE}"
+  exit 1
+fi
+echo "[+] Kernel release identity verified: ${KERNEL_RELEASE}"
 if [[ "$KSU_TYPE" == *susfs* ]]; then
   echo "==== SUSFS CONFIG SNAPSHOT ===="
   grep -E '^CONFIG_KSU_SUSFS|^CONFIG_KSU_MANUAL_HOOK|^CONFIG_TMPFS_XATTR=|^CONFIG_NOMOUNT=' out/.config || true

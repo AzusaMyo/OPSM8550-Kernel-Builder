@@ -3,44 +3,6 @@
 # Post-patch/post-build verification helpers. Sourced, not executed.
 #
 
-verify_external_module_exports() {
-  local symbol
-  local export_table
-  local required_symbols=(
-    module_layout
-    _raw_spin_lock
-    _raw_spin_unlock
-    kasan_flag_enabled
-  )
-
-  test -s out/vmlinux.symvers || {
-    echo "::error::out/vmlinux.symvers is missing; external-module exports cannot be verified."
-    exit 1
-  }
-
-  export_table="$(awk '$2 ~ /^(module_layout|_raw_spin_lock|_raw_spin_unlock|kasan_flag_enabled)$/ { print }' \
-    out/vmlinux.symvers)"
-
-  {
-    echo "==== EXTERNAL MODULE COMPATIBILITY PROOF ===="
-    echo "kernel_branch=${KERNEL_BRANCH}"
-    echo "kernel_commit=${KERNEL_COMMIT}"
-    echo "export_table=out/vmlinux.symvers"
-    grep -E '^CONFIG_(MODULES|MODULE_UNLOAD|MODVERSIONS|MODULE_FORCE_LOAD|UNINLINE_SPIN_UNLOCK|KASAN|KASAN_HW_TAGS)=|^# CONFIG_(TRIM_UNUSED_KSYMS|ARCH_INLINE_SPIN_LOCK|ARCH_INLINE_SPIN_UNLOCK|INLINE_SPIN_LOCK|KASAN_GENERIC|KASAN_SW_TAGS) is not set$' out/.config || true
-    printf '%s\n' "$export_table"
-  } > external-module-proof.txt
-
-  for symbol in "${required_symbols[@]}"; do
-    if ! awk -v required="$symbol" '$2 == required { found = 1 } END { exit !found }' \
-      out/vmlinux.symvers; then
-      echo "::error::External-module compatibility symbol ${symbol} is not exported by the final kernel."
-      exit 1
-    fi
-  done
-
-  cat external-module-proof.txt
-}
-
 verify_kpm_source_integration() {
   local ksu_kernel_dir="$1"
   local kpm_object

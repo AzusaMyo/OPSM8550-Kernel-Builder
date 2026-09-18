@@ -333,7 +333,6 @@ jobs:
             ${{ github.workspace }}/${{ steps.resolve.outputs.soc }}/zeromount-proof.txt
             ${{ github.workspace }}/${{ steps.resolve.outputs.soc }}/kpm-source-proof.txt
             ${{ github.workspace }}/${{ steps.resolve.outputs.soc }}/kpm-proof.txt
-            ${{ github.workspace }}/${{ steps.resolve.outputs.soc }}/external-module-proof.txt
             ${{ github.workspace }}/${{ steps.resolve.outputs.soc }}/out/.config
 
       - name: Save ccache

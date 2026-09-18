@@ -65,16 +65,12 @@ safely.
   workflow commit, builds the same verified artifact, then a separate
   least-privilege job publishes the release from that tag.
 
-Full builds preserve GKI module versioning and vendor-module compatibility, but
-disable unused-export trimming so post-boot external drivers can resolve normal
-kernel exports. They also keep the plain arm64 raw spin lock/unlock operations
-out of line so their `EXPORT_SYMBOL` definitions are compiled. The pipeline
-verifies `module_layout`, `_raw_spin_lock`, `_raw_spin_unlock`, and
-`kasan_flag_enabled` against the generated `vmlinux.symvers`; this prevents
-shipping an image that later fails those symbols during `insmod`. Forced loading
-is available for loaders handling intentionally stripped version tables, but a
-module must still target the same kernel/KMI—forcing a genuinely incompatible
-module can crash the device.
+Full builds preserve the upstream/vendor ABI-sensitive configuration instead of
+forcing debugging, symbol-export, or spinlock options. The pipeline also pins
+the kernel release suffix to the exact source commit (for example,
+`-g0d516eb3375f`) and verifies that release in the final `Image` banner. This
+keeps the kernel vermagic aligned with the ROM's vendor modules while the
+selected root preset changes only its required feature options.
 
 ## Root integrations
 

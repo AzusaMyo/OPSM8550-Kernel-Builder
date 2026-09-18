@@ -71,7 +71,7 @@ append_file_block() {
   if [[ -f "${SOC}/out/.config" ]]; then
     echo '#### .config snapshot'
     echo '```text'
-    grep -E '^CONFIG_(MODULES|MODULE_UNLOAD|MODVERSIONS|MODULE_FORCE_LOAD|UNINLINE_SPIN_UNLOCK|KASAN|KASAN_HW_TAGS)=|^# CONFIG_(TRIM_UNUSED_KSYMS|ARCH_INLINE_SPIN_LOCK|ARCH_INLINE_SPIN_UNLOCK|INLINE_SPIN_LOCK|KASAN_GENERIC|KASAN_SW_TAGS) is not set$|^CONFIG_KSU=|^CONFIG_KSU_SUSFS|^CONFIG_KSU_MANUAL_HOOK|^CONFIG_NOMOUNT=|^CONFIG_ZEROMOUNT=|^CONFIG_KPM=|^CONFIG_KALLSYMS(_ALL)?=' "${SOC}/out/.config" || true
+    grep -E '^CONFIG_(MODULES|MODULE_UNLOAD|MODVERSIONS|MODULE_FORCE_LOAD|ARCH_INLINE_SPIN_LOCK|ARCH_INLINE_SPIN_UNLOCK|INLINE_SPIN_LOCK|UNINLINE_SPIN_UNLOCK|TRIM_UNUSED_KSYMS|KASAN|KASAN_GENERIC|KASAN_SW_TAGS|KASAN_HW_TAGS)=|^# CONFIG_(MODULE_FORCE_LOAD|UNINLINE_SPIN_UNLOCK|TRIM_UNUSED_KSYMS|KASAN|KASAN_GENERIC|KASAN_SW_TAGS|KASAN_HW_TAGS) is not set$|^CONFIG_KSU=|^CONFIG_KSU_SUSFS|^CONFIG_KSU_MANUAL_HOOK|^CONFIG_NOMOUNT=|^CONFIG_ZEROMOUNT=|^CONFIG_KPM=|^CONFIG_KALLSYMS(_ALL)?=' "${SOC}/out/.config" || true
     echo '```'
     echo
   fi
@@ -85,5 +85,4 @@ append_file_block() {
   append_file_block "zeromount-proof.txt"        "${SOC}/zeromount-proof.txt"
   append_file_block "kpm-source-proof.txt"     "${SOC}/kpm-source-proof.txt"
   append_file_block "kpm-proof.txt"            "${SOC}/kpm-proof.txt"
-  append_file_block "external-module-proof.txt" "${SOC}/external-module-proof.txt"
 } >> "$GITHUB_STEP_SUMMARY"
