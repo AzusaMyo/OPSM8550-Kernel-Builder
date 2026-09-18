@@ -102,6 +102,7 @@ configure_anykernel_properties \
   "$DEVICE_NAMES" \
   "$SUPPORTED_ANDROID_VERSIONS"
 add_anykernel_devicecheck_diagnostics "$ANYKERNEL_UPDATE_BINARY"
+patch_anykernel_app_flash_staging "$ANYKERNEL_UPDATE_BINARY"
 
 if [[ "$KPM_ENABLED" == true ]]; then
   KSU_CHECKOUT_NAME="$(basename "${KSU_REPO%.git}")"

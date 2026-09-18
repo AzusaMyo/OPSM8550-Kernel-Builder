@@ -98,6 +98,8 @@ grep -Fq 'sanitize_cached_anykernel_checkout AnyKernel3' "$ANYKERNEL_PACKAGE_SCR
   || fail "AnyKernel packaging must sanitize a restored checkout"
 grep -Fq 'install_anykernel_template "$ANYKERNEL_TEMPLATE" "$ANYKERNEL_SCRIPT"' "$ANYKERNEL_PACKAGE_SCRIPT" \
   || fail "AnyKernel packaging must install the device-specific flash template"
+grep -Fq 'patch_anykernel_app_flash_staging "$ANYKERNEL_UPDATE_BINARY"' "$ANYKERNEL_PACKAGE_SCRIPT" \
+  || fail "AnyKernel packaging must move app-triggered flashes out of app-private data"
 grep -Fq 'install_anykernel_arm64_busybox "$KSU_ARM64_BUSYBOX" "AnyKernel3/tools/busybox"' "$ANYKERNEL_PACKAGE_SCRIPT" \
   || fail "KPM packaging must replace AnyKernel's legacy ARM BusyBox"
 grep -Fq 'install_anykernel_arm64_magiskboot \' "$ANYKERNEL_PACKAGE_SCRIPT" \
@@ -301,6 +303,7 @@ assert_eq "16" "$SUPPORTED_ANDROID_VERSIONS" "Android 16 development detection"
 
 ANYKERNEL_FIXTURE="$(mktemp)"
 UPDATE_BINARY_FIXTURE="$(mktemp)"
+APP_STAGING_FIXTURE="$(mktemp)"
 KPM_CONFIG_FIXTURE="$(mktemp)"
 ZEROMOUNT_CONFIG_FIXTURE="$(mktemp)"
 ZEROMOUNT_FIXTURE_DIR="$(mktemp -d)"
@@ -312,7 +315,7 @@ EXTRACT_CERT_FIXTURE_DIR="$(mktemp -d)"
 ANYKERNEL_CACHE_FIXTURE_DIR="$(mktemp -d)"
 ANYKERNEL_PACKAGE_FIXTURE_DIR="$(mktemp -d)"
 SUSFS_VENDOR_FIXTURE_DIR="$(mktemp -d)"
-trap 'rm -f "$ANYKERNEL_FIXTURE" "$UPDATE_BINARY_FIXTURE" "$KPM_CONFIG_FIXTURE" "$ZEROMOUNT_CONFIG_FIXTURE" "$MODULE_CONFIG_FIXTURE" "$SPINLOCK_KCONFIG_FIXTURE"; rm -rf "$KPM_VERIFY_FIXTURE" "$NOMOUNT_FIXTURE_DIR" "$ZEROMOUNT_FIXTURE_DIR" "$EXTRACT_CERT_FIXTURE_DIR" "$ANYKERNEL_CACHE_FIXTURE_DIR" "$ANYKERNEL_PACKAGE_FIXTURE_DIR" "$SUSFS_VENDOR_FIXTURE_DIR"' EXIT
+trap 'rm -f "$ANYKERNEL_FIXTURE" "$UPDATE_BINARY_FIXTURE" "$APP_STAGING_FIXTURE" "$KPM_CONFIG_FIXTURE" "$ZEROMOUNT_CONFIG_FIXTURE" "$MODULE_CONFIG_FIXTURE" "$SPINLOCK_KCONFIG_FIXTURE"; rm -rf "$KPM_VERIFY_FIXTURE" "$NOMOUNT_FIXTURE_DIR" "$ZEROMOUNT_FIXTURE_DIR" "$EXTRACT_CERT_FIXTURE_DIR" "$ANYKERNEL_CACHE_FIXTURE_DIR" "$ANYKERNEL_PACKAGE_FIXTURE_DIR" "$SUSFS_VENDOR_FIXTURE_DIR"' EXIT
 
 mkdir -p "$ZEROMOUNT_FIXTURE_DIR/fs"
 cat > "$ZEROMOUNT_FIXTURE_DIR/fs/stat.c" <<'EOF'
@@ -406,14 +409,52 @@ grep -Fxq 'BLOCK=boot;' "$ANYKERNEL_TEMPLATE_FIXTURE" \
   || fail "AnyKernel device template does not target boot by partition name"
 grep -Fxq 'IS_SLOT_DEVICE=1;' "$ANYKERNEL_TEMPLATE_FIXTURE" \
   || fail "AnyKernel device template does not enable A/B slot detection"
-grep -Fq 'Stage 1/3: dumping and unpacking boot image' "$ANYKERNEL_TEMPLATE_FIXTURE" \
+grep -Fxq 'split_boot;' "$ANYKERNEL_TEMPLATE_FIXTURE" \
+  || fail "AnyKernel device template does not support ramdiskless boot images"
+grep -Fxq 'flash_boot;' "$ANYKERNEL_TEMPLATE_FIXTURE" \
+  || fail "AnyKernel device template does not preserve a ramdiskless boot layout"
+if grep -Eq '^[[:space:]]*(dump_boot|write_boot);' "$ANYKERNEL_TEMPLATE_FIXTURE"; then
+  fail "AnyKernel device template still requires a boot ramdisk"
+fi
+grep -Fq 'Stage 1/3: dumping and splitting boot image' "$ANYKERNEL_TEMPLATE_FIXTURE" \
   || fail "AnyKernel device template does not report the dump stage"
-grep -Fq 'Stage 3/3: repacking and flashing boot image' "$ANYKERNEL_TEMPLATE_FIXTURE" \
+grep -Fq 'Stage 3/3: rebuilding and flashing boot image' "$ANYKERNEL_TEMPLATE_FIXTURE" \
   || fail "AnyKernel device template does not report the flash stage"
 if grep -Eq 'omap_hsmmc|maguro|toro|tuna' "$ANYKERNEL_TEMPLATE_FIXTURE"; then
   fail "AnyKernel device template retained an upstream example-device setting"
 fi
 rm -f "$ANYKERNEL_TEMPLATE_FIXTURE"
+
+printf '%s\n' \
+  '[ "$AKHOME" ] || export AKHOME=$POSTINSTALL/tmp/anykernel;' \
+  'printf "%s\n" "$AKHOME"' \
+  > "$APP_STAGING_FIXTURE"
+chmod 755 "$APP_STAGING_FIXTURE"
+patch_anykernel_app_flash_staging "$APP_STAGING_FIXTURE"
+sh -n "$APP_STAGING_FIXTURE" \
+  || fail "AnyKernel app-flasher staging produced invalid shell syntax"
+APP_PRIVATE_AKHOME="$(
+  AKHOME=/data/user/0/com.sukisu.ultra/files/tmp/anykernel \
+    POSTINSTALL=/data/user/0/com.sukisu.ultra/files \
+    sh "$APP_STAGING_FIXTURE"
+)"
+[[ "$APP_PRIVATE_AKHOME" == /data/local/tmp/anykernel-* ]] \
+  || fail "AnyKernel did not replace an app-private AKHOME: $APP_PRIVATE_AKHOME"
+APP_PRIVATE_POSTINSTALL="$(
+  AKHOME= \
+    POSTINSTALL=/data/user/0/com.sukisu.ultra/files \
+    sh "$APP_STAGING_FIXTURE"
+)"
+[[ "$APP_PRIVATE_POSTINSTALL" == /data/local/tmp/anykernel-* ]] \
+  || fail "AnyKernel did not replace an app-private POSTINSTALL: $APP_PRIVATE_POSTINSTALL"
+RECOVERY_AKHOME="$(AKHOME= POSTINSTALL=/postinstall sh "$APP_STAGING_FIXTURE")"
+assert_eq "/postinstall/tmp/anykernel" "$RECOVERY_AKHOME" \
+  "AnyKernel recovery staging path"
+APP_STAGING_HASH="$(sha256sum "$APP_STAGING_FIXTURE" | cut -d' ' -f1)"
+patch_anykernel_app_flash_staging "$APP_STAGING_FIXTURE"
+assert_eq "$APP_STAGING_HASH" \
+  "$(sha256sum "$APP_STAGING_FIXTURE" | cut -d' ' -f1)" \
+  "AnyKernel app-flasher staging idempotence"
 
 cat > "$EXTRACT_CERT_FIXTURE_DIR/extract-cert.c" <<'EOF'
 #include <openssl/engine.h>
@@ -742,6 +783,16 @@ for package_timestamp in 20260101_000000 20260101_000001; do
     || fail "AnyKernel packaging did not produce the flashable archive"
   test -s "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/release-assets/SHA256SUMS" \
     || fail "AnyKernel packaging did not produce checksums"
+  grep -Fxq 'split_boot;' \
+    "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/anykernel.sh" \
+    || fail "AnyKernel package does not split ramdiskless boot images"
+  grep -Fxq 'flash_boot;' \
+    "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/anykernel.sh" \
+    || fail "AnyKernel package does not flash ramdiskless boot images"
+  if grep -Eq '^[[:space:]]*(dump_boot|write_boot);' \
+    "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/anykernel.sh"; then
+    fail "AnyKernel package still attempts to unpack a boot ramdisk"
+  fi
   assert_eq "sukisu-arm64-busybox" \
     "$(cat "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/tools/busybox")" \
     "KPM AnyKernel arm64 BusyBox replacement"
@@ -758,9 +809,9 @@ for package_timestamp in 20260101_000000 20260101_000001; do
     test ! -e "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/tools/$optional_tool" \
       || fail "KPM AnyKernel retained incompatible optional tool: $optional_tool"
   done
-  grep -Fq '[ "$AKHOME" ] || export AKHOME=$POSTINSTALL/tmp/anykernel;' \
+  grep -Fq 'export AKHOME=/data/local/tmp/anykernel-$$;' \
     "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/META-INF/com/google/android/update-binary" \
-    || fail "AnyKernel package changed upstream work-directory handling"
+    || fail "AnyKernel package does not stage app-triggered flashes in executable temporary storage"
   grep -Fq 'AnyKernel work directory: $AKHOME' \
     "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/META-INF/com/google/android/update-binary" \
     || fail "AnyKernel package does not report its effective staging directory"
@@ -776,6 +827,8 @@ for package_timestamp in 20260101_000000 20260101_000001; do
   sh -n "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/META-INF/com/google/android/update-binary" \
     || fail "AnyKernel preflight diagnostics produced invalid shell syntax"
   PREFLIGHT_UPDATER_HASH="$(sha256sum "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/META-INF/com/google/android/update-binary" | cut -d' ' -f1)"
+  patch_anykernel_app_flash_staging \
+    "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/META-INF/com/google/android/update-binary"
   add_anykernel_preflight_diagnostics \
     "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/META-INF/com/google/android/update-binary" arm64 true
   assert_eq "$PREFLIGHT_UPDATER_HASH" \

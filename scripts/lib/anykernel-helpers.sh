@@ -65,14 +65,18 @@ install_anykernel_template() {
     echo "::error::AnyKernel template does not require A/B slot detection."
     return 1
   }
-  grep -Fxq 'dump_boot;' "$destination" || {
-    echo "::error::AnyKernel template does not unpack the existing boot image."
+  grep -Fxq 'split_boot;' "$destination" || {
+    echo "::error::AnyKernel template does not split the existing boot image."
     return 1
   }
-  grep -Fxq 'write_boot;' "$destination" || {
-    echo "::error::AnyKernel template does not write the rebuilt boot image."
+  grep -Fxq 'flash_boot;' "$destination" || {
+    echo "::error::AnyKernel template does not flash the rebuilt boot image."
     return 1
   }
+  if grep -Eq '^[[:space:]]*(dump_boot|write_boot);' "$destination"; then
+    echo "::error::AnyKernel template must not unpack a possibly absent boot ramdisk."
+    return 1
+  fi
   if grep -Eq 'omap_hsmmc|maguro|toro|tuna' "$destination"; then
     echo "::error::AnyKernel template still contains upstream example-device settings."
     return 1
@@ -162,6 +166,44 @@ add_anykernel_devicecheck_diagnostics() {
   }
   replace_file_preserving_mode "$tmp_file" "$file"
   grep -Fq 'ro.product.device=$device' "$file"
+}
+
+patch_anykernel_app_flash_staging() {
+  local file="$1"
+  local tmp_file
+  local akhome_line='[ "$AKHOME" ] || export AKHOME=$POSTINSTALL/tmp/anykernel;'
+
+  if grep -Fq 'export AKHOME=/data/local/tmp/anykernel-$$;' "$file"; then
+    return 0
+  fi
+
+  tmp_file="$(mktemp)"
+  awk -v akhome_line="$akhome_line" '
+    $0 == akhome_line {
+      print "case \"${AKHOME:-}:$POSTINSTALL\" in"
+      print "  /data/user/*:*|/data/data/*:*|*:/data/user/*|*:/data/data/*)"
+      print "    # Android app-private data may be writable but non-executable to the"
+      print "    # root shell used by manager flashers. Stage the complete installer"
+      print "    # in the shell-owned executable temporary directory before unzip."
+      print "    export AKHOME=/data/local/tmp/anykernel-$$;"
+      print "    ;;"
+      print "  *)"
+      print "    [ \"$AKHOME\" ] || export AKHOME=$POSTINSTALL/tmp/anykernel;"
+      print "    ;;"
+      print "esac;"
+      staged = 1
+      next
+    }
+    { print }
+    END { if (!staged) exit 1 }
+  ' "$file" > "$tmp_file" || {
+    rm -f "$tmp_file"
+    echo "::error::Could not add Android app-flasher staging compatibility to $file"
+    return 1
+  }
+
+  replace_file_preserving_mode "$tmp_file" "$file"
+  grep -Fq 'export AKHOME=/data/local/tmp/anykernel-$$;' "$file"
 }
 
 install_anykernel_arm64_binary() {

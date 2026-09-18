@@ -184,9 +184,12 @@ Generated AnyKernel3 ZIPs enable `do.devicecheck=1` and contain only the
 device-specific codenames and stock board IDs assigned to the selected profile.
 Android version checking is also enabled when the selected branch identifies a
 known Android generation. The installer targets the slot-aware `boot` partition
-by name and preserves the existing ramdisk while replacing only the kernel
-Image; upstream AnyKernel example-device paths and demo ramdisk edits are not
-included. KPM packages replace AnyKernel's legacy 32-bit ARM BusyBox and
+by name, splits and rebuilds the boot image without unpacking its ramdisk, and
+replaces only the kernel Image. This supports newer devices such as OnePlus 11,
+where the first-stage ramdisk lives in `init_boot` and `boot` legitimately has
+no ramdisk, while preserving a boot ramdisk when one is present. Upstream
+AnyKernel example-device paths and demo ramdisk edits are not included. KPM
+packages replace AnyKernel's legacy 32-bit ARM BusyBox and
 MagiskBoot with verified AArch64 builds. BusyBox comes from the exact SukiSU
 source revision used by the build; MagiskBoot comes from a pinned official
 Magisk APK with both archive and extracted-binary SHA-256 verification. On

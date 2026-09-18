@@ -38,11 +38,13 @@ PATCH_VBMETA_FLAG=auto;
 # Import functions/variables and resolve the target boot slot.
 . tools/ak3-core.sh;
 
-# Preserve the existing ramdisk and replace only the kernel Image.
-ui_print "Stage 1/3: dumping and unpacking boot image...";
-dump_boot;
-ui_print "Stage 2/3: boot image unpacked; replacing kernel...";
-ui_print "Stage 3/3: repacking and flashing boot image...";
-write_boot;
+# Preserve the boot image layout and replace only the kernel Image.  Modern
+# devices such as OnePlus 11 keep their first-stage ramdisk in init_boot, so
+# boot itself legitimately has no ramdisk for dump_boot to unpack.
+ui_print "Stage 1/3: dumping and splitting boot image...";
+split_boot;
+ui_print "Stage 2/3: boot image split; replacing kernel...";
+ui_print "Stage 3/3: rebuilding and flashing boot image...";
+flash_boot;
 ui_print "Boot image flash completed.";
 ## end boot install
