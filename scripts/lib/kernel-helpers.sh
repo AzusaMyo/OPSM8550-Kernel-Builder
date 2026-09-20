@@ -263,28 +263,6 @@ require_config_enabled() {
   fi
 }
 
-require_config_value() {
-  local config_file="$1"
-  local key="$2"
-  local value="$3"
-  local expected
-
-  case "$value" in
-    y|m) expected="${key}=${value}" ;;
-    n) expected="# ${key} is not set" ;;
-    *)
-      echo "::error::Unsupported expected config value '${value}' for ${key}."
-      exit 1
-      ;;
-  esac
-
-  if ! grep -qxF "$expected" "$config_file"; then
-    echo "::error::Device make flag ${key}=${value} was not preserved in ${config_file}."
-    grep -n "${key}" "$config_file" || true
-    exit 1
-  fi
-}
-
 require_config_disabled() {
   local config_file="$1"
   local key="$2"

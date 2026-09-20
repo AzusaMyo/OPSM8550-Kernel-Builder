@@ -39,10 +39,10 @@ kernel and modules instead of the unrelated development/Lineage branch, which
 is not ABI-compatible with crDroid's first-stage vendor modules.
 
 The OnePlus 12 LineageOS and crDroid profiles also reproduce the device tree's
-required `CONFIG_OPLUS_DEVICE_DTBS=y` make assignment. The build verifies that
-profile-level make assignments survive final Kconfig resolution before
-compiling, because the resulting `Image` must remain compatible with the WLAN
-and other external modules already present in the ROM's `vendor_dlkm` image.
+required `CONFIG_OPLUS_DEVICE_DTBS=y` make assignment on every make invocation
+and records it in build provenance. Command-line Kbuild assignments are not
+expected to be written back to `.config`; keeping them on the make command line
+matches how the ROM builds its kernel and external modules.
 
 The LunarisOS OnePlus 11 profile follows the kernel source published in the
 LunarisOS OTA metadata. Its maintainer kernel uses `lineage-23.2`, while its
