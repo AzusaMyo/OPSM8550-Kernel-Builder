@@ -38,6 +38,12 @@ Use the dedicated crDroid profile on crDroid: it pins crDroid's own `16.0`
 kernel and modules instead of the unrelated development/Lineage branch, which
 is not ABI-compatible with crDroid's first-stage vendor modules.
 
+The OnePlus 12 LineageOS and crDroid profiles also reproduce the device tree's
+required `CONFIG_OPLUS_DEVICE_DTBS=y` make assignment. The build verifies that
+profile-level make assignments survive final Kconfig resolution before
+compiling, because the resulting `Image` must remain compatible with the WLAN
+and other external modules already present in the ROM's `vendor_dlkm` image.
+
 The LunarisOS OnePlus 11 profile follows the kernel source published in the
 LunarisOS OTA metadata. Its maintainer kernel uses `lineage-23.2`, while its
 matching external modules use the `los` branch; the resolver pins both branches

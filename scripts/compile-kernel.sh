@@ -102,6 +102,7 @@ MAKE_ARGS=(
   "HOSTCC=ccache clang"
   "HOSTCXX=ccache clang++"
 )
+KERNEL_MAKE_FLAG_ARRAY=()
 if [[ -n "$KERNEL_MAKE_FLAGS" ]]; then
   read -r -a KERNEL_MAKE_FLAG_ARRAY <<< "$KERNEL_MAKE_FLAGS"
   for make_flag in "${KERNEL_MAKE_FLAG_ARRAY[@]}"; do
@@ -165,6 +166,15 @@ apply_variant_configs arch/arm64/configs/gki_defconfig
 make "${MAKE_ARGS[@]}" gki_defconfig "${ACTIVE_CONFIG_ARRAY[@]}"
 apply_variant_configs out/.config
 make "${MAKE_ARGS[@]}" olddefconfig
+
+# Device trees can require command-line Kconfig assignments in addition to
+# their config fragments. Verify that Kconfig accepted each assignment before
+# compiling an Image that must load the ROM's prebuilt vendor_dlkm modules.
+for make_flag in "${KERNEL_MAKE_FLAG_ARRAY[@]}"; do
+  config_key="${make_flag%%=*}"
+  config_value="${make_flag#*=}"
+  require_config_value out/.config "$config_key" "$config_value"
+done
 
 require_config_enabled  out/.config CONFIG_MODULES
 require_config_enabled  out/.config CONFIG_MODULE_UNLOAD

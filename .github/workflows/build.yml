@@ -335,6 +335,8 @@ jobs:
             ${{ github.workspace }}/${{ steps.resolve.outputs.soc }}/kpm-source-proof.txt
             ${{ github.workspace }}/${{ steps.resolve.outputs.soc }}/kpm-proof.txt
             ${{ github.workspace }}/${{ steps.resolve.outputs.soc }}/out/.config
+            ${{ github.workspace }}/${{ steps.resolve.outputs.soc }}/out/Module.symvers
+            ${{ github.workspace }}/${{ steps.resolve.outputs.soc }}/out/vmlinux.symvers
 
       - name: Save ccache
         if: always() && inputs.build_mode != 'Patch/config validation only' && steps.ccache-restore.outputs.cache-hit != 'true' && steps.ccache-restore.outputs.cache-primary-key != '' && hashFiles('.ccache/**') != ''

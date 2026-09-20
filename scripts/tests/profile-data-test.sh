@@ -147,6 +147,19 @@ assert_eq "crdroidandroid" "$KERNEL_SOURCE" "Nord CE4 crDroid kernel source"
 assert_eq "sm8550" "$UPSTREAM_SOC" "Nord CE4 crDroid upstream repository SoC"
 assert_eq "CONFIG_OPLUS_DEVICE_DTBS=y CONFIG_BENZ_DTB=y" "$KERNEL_MAKE_FLAGS" "Nord CE4 crDroid make flags"
 
+resolve_build_profile "SM8650 | OnePlus 12 | LineageOS (recommended)"
+assert_eq "CONFIG_OPLUS_DEVICE_DTBS=y" "$KERNEL_MAKE_FLAGS" "OnePlus 12 LineageOS make flags"
+resolve_build_profile "SM8650 | OnePlus 12 | crDroid"
+assert_eq "CONFIG_OPLUS_DEVICE_DTBS=y" "$KERNEL_MAKE_FLAGS" "OnePlus 12 crDroid make flags"
+grep -Fq 'require_config_value out/.config "$config_key" "$config_value"' "$COMPILE_SCRIPT" \
+  || fail "device make flags are not verified in the generated kernel config"
+grep -Fq 'device_kernel_make_flags: ($kernel_make_flags | split(" ") | map(select(length > 0)))' "$ANYKERNEL_PACKAGE_SCRIPT" \
+  || fail "build provenance does not record device kernel make flags"
+grep -Fq "out/Module.symvers" "$WORKFLOW_FILE" \
+  || fail "diagnostics do not retain the kernel module CRC table"
+grep -Fq "it does not replace the ROM's vendor_dlkm modules" "$ANYKERNEL_PACKAGE_SCRIPT" \
+  || fail "release notes do not warn about the retained ROM vendor modules"
+
 resolve_build_profile "SM8550 | OnePlus 11 | LunarisOS"
 assert_eq "https://github.com/osm1019/kernel_oneplus_sm8550.git" "$KERNEL_REPO_OVERRIDE" "LunarisOS kernel repository"
 assert_eq "https://github.com/osm1019/android_kernel_oneplus_sm8550-modules.git" "$MODULES_REPO_OVERRIDE" "LunarisOS modules repository"
@@ -668,6 +681,17 @@ if verify_kernel_release_identity \
   0123456789abcdef0123456789abcdef01234567 >/dev/null 2>&1; then
   fail "kernel release verification accepted a missing source identity"
 fi
+
+MAKE_FLAG_CONFIG_FIXTURE="$(mktemp)"
+printf '%s\n' \
+  'CONFIG_OPLUS_DEVICE_DTBS=y' \
+  'CONFIG_TEST_MODULE=m' \
+  '# CONFIG_TEST_DISABLED is not set' \
+  > "$MAKE_FLAG_CONFIG_FIXTURE"
+require_config_value "$MAKE_FLAG_CONFIG_FIXTURE" CONFIG_OPLUS_DEVICE_DTBS y
+require_config_value "$MAKE_FLAG_CONFIG_FIXTURE" CONFIG_TEST_MODULE m
+require_config_value "$MAKE_FLAG_CONFIG_FIXTURE" CONFIG_TEST_DISABLED n
+rm -f "$MAKE_FLAG_CONFIG_FIXTURE"
 
 printf '%s\n' \
   'kernel.string=placeholder' \
