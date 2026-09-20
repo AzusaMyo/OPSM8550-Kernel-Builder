@@ -157,6 +157,8 @@ resolve_root_solution "ReSukiSU + susfs"
 assert_eq "ReSukiSU-with-susfs" "$KSU_TYPE" "root mapping"
 resolve_root_solution "KernelSU-Next + SUSFS"
 assert_eq "KernelSU-Next-with-susfs" "$KSU_TYPE" "KernelSU-Next SUSFS root mapping"
+resolve_root_solution "KernelSU-Next + SUSFS + NoMount (experimental)"
+assert_eq "KernelSU-Next-with-susfs-nomount" "$KSU_TYPE" "KernelSU-Next NoMount root mapping"
 resolve_root_solution "KernelSU-Next + SUSFS + ZeroMount (experimental)"
 assert_eq "KernelSU-Next-with-susfs-zeromount" "$KSU_TYPE" "KernelSU-Next ZeroMount root mapping"
 resolve_root_solution "ReSukiSU + SUSFS + NoMount (experimental)"
@@ -175,14 +177,16 @@ grep -Fq -- '- ReSukiSU + SUSFS + NoMount (experimental)' "$WORKFLOW_FILE" \
   || fail "workflow is missing the NoMount root option"
 grep -Fq -- '- KernelSU-Next + SUSFS' "$WORKFLOW_FILE" \
   || fail "workflow is missing the KernelSU-Next SUSFS root option"
+grep -Fq -- '- KernelSU-Next + SUSFS + NoMount (experimental)' "$WORKFLOW_FILE" \
+  || fail "workflow is missing the KernelSU-Next NoMount root option"
 grep -Fq -- '- Build all 3 featured SUSFS variants (batch)' "$WORKFLOW_FILE" \
   || fail "workflow is missing the three-variant batch root option"
 grep -Fq -- '- Build all 3 ZeroMount variants (batch)' "$WORKFLOW_FILE" \
   || fail "workflow is missing the three-variant ZeroMount batch option"
 grep -Fq 'name: Build ${{ matrix.root_solution }}' "$WORKFLOW_FILE" \
   || fail "workflow build job does not use the root-solution matrix"
-grep -Fq '"SukiSU Ultra + SUSFS + NoMount + KPM (experimental)","ReSukiSU + SUSFS + NoMount (experimental)","KernelSU-Next + SUSFS"' "$WORKFLOW_FILE" \
-  || fail "workflow original batch matrix changed unexpectedly"
+grep -Fq '"SukiSU Ultra + SUSFS + NoMount + KPM (experimental)","ReSukiSU + SUSFS + NoMount (experimental)","KernelSU-Next + SUSFS + NoMount (experimental)"' "$WORKFLOW_FILE" \
+  || fail "workflow featured SUSFS batch matrix does not contain all three NoMount variants"
 grep -Fq '"SukiSU Ultra + SUSFS + ZeroMount + KPM (experimental)","ReSukiSU + SUSFS + ZeroMount (experimental)","KernelSU-Next + SUSFS + ZeroMount (experimental)"' "$WORKFLOW_FILE" \
   || fail "workflow batch matrix does not contain the three ZeroMount variants"
 grep -Fq 'ARTIFACT_NAME="kernel-package-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${KSU_TYPE}"' "$WORKFLOW_FILE" \
@@ -191,6 +195,10 @@ grep -Fq 'KSU_REPO="https://github.com/pershoot/KernelSU-Next.git"' "$RESOLVER_S
   || fail "KernelSU-Next SUSFS must resolve the compatible dev-susfs fork"
 grep -Fq 'KSU_REF="dev-susfs"' "$RESOLVER_SCRIPT" \
   || fail "KernelSU-Next SUSFS must resolve the dev-susfs branch"
+grep -Fq 'KernelSU-Next-with-susfs|KernelSU-Next-with-susfs-nomount|KernelSU-Next-with-susfs-zeromount)' "$RESOLVER_SCRIPT" \
+  || fail "resolver does not route the KernelSU-Next NoMount preset to the SUSFS-compatible fork"
+grep -Fq '"KernelSU-Next-with-susfs"|"KernelSU-Next-with-susfs-nomount"|"KernelSU-Next-with-susfs-zeromount")' "$KSU_SETUP_SCRIPT" \
+  || fail "KernelSU setup does not install the SUSFS-compatible fork for the NoMount preset"
 grep -Fq -- '- SukiSU Ultra + KPM (experimental)' "$WORKFLOW_FILE" \
   || fail "workflow is missing the KPM root option"
 grep -Fq -- '- SukiSU Ultra + SUSFS + KPM (experimental)' "$WORKFLOW_FILE" \
@@ -199,6 +207,8 @@ grep -Fq -- '- SukiSU Ultra + SUSFS + NoMount + KPM (experimental)' "$WORKFLOW_F
   || fail "workflow is missing the combined SukiSU SUSFS/NoMount/KPM root option"
 grep -Fq -- '- SukiSU Ultra + SUSFS + NoMount + KPM (experimental)' "$UPSTREAM_HEALTH_WORKFLOW" \
   || fail "upstream health is missing the combined SukiSU SUSFS/NoMount/KPM preset"
+grep -Fq -- '- KernelSU-Next + SUSFS + NoMount (experimental)' "$UPSTREAM_HEALTH_WORKFLOW" \
+  || fail "upstream health is missing KernelSU-Next NoMount"
 grep -Fq -- '- integration: KernelSU-Next + SUSFS + ZeroMount (experimental)' "$UPSTREAM_HEALTH_WORKFLOW" \
   || fail "upstream health is missing KernelSU-Next ZeroMount"
 grep -Fq -- '- integration: ReSukiSU + SUSFS + ZeroMount (experimental)' "$UPSTREAM_HEALTH_WORKFLOW" \
@@ -305,6 +315,7 @@ ANYKERNEL_FIXTURE="$(mktemp)"
 UPDATE_BINARY_FIXTURE="$(mktemp)"
 APP_STAGING_FIXTURE="$(mktemp)"
 KPM_CONFIG_FIXTURE="$(mktemp)"
+KSUN_NOMOUNT_CONFIG_FIXTURE="$(mktemp)"
 ZEROMOUNT_CONFIG_FIXTURE="$(mktemp)"
 ZEROMOUNT_FIXTURE_DIR="$(mktemp -d)"
 MODULE_CONFIG_FIXTURE="$(mktemp)"
@@ -316,7 +327,7 @@ ANYKERNEL_CACHE_FIXTURE_DIR="$(mktemp -d)"
 ANYKERNEL_PACKAGE_FIXTURE_DIR="$(mktemp -d)"
 ANYKERNEL_SLOT_FIXTURE_DIR="$(mktemp -d)"
 SUSFS_VENDOR_FIXTURE_DIR="$(mktemp -d)"
-trap 'rm -f "$ANYKERNEL_FIXTURE" "$UPDATE_BINARY_FIXTURE" "$APP_STAGING_FIXTURE" "$KPM_CONFIG_FIXTURE" "$ZEROMOUNT_CONFIG_FIXTURE" "$MODULE_CONFIG_FIXTURE" "$SCMVERSION_FIXTURE"; rm -rf "$KPM_VERIFY_FIXTURE" "$NOMOUNT_FIXTURE_DIR" "$ZEROMOUNT_FIXTURE_DIR" "$EXTRACT_CERT_FIXTURE_DIR" "$ANYKERNEL_CACHE_FIXTURE_DIR" "$ANYKERNEL_PACKAGE_FIXTURE_DIR" "$ANYKERNEL_SLOT_FIXTURE_DIR" "$SUSFS_VENDOR_FIXTURE_DIR"' EXIT
+trap 'rm -f "$ANYKERNEL_FIXTURE" "$UPDATE_BINARY_FIXTURE" "$APP_STAGING_FIXTURE" "$KPM_CONFIG_FIXTURE" "$KSUN_NOMOUNT_CONFIG_FIXTURE" "$ZEROMOUNT_CONFIG_FIXTURE" "$MODULE_CONFIG_FIXTURE" "$SCMVERSION_FIXTURE"; rm -rf "$KPM_VERIFY_FIXTURE" "$NOMOUNT_FIXTURE_DIR" "$ZEROMOUNT_FIXTURE_DIR" "$EXTRACT_CERT_FIXTURE_DIR" "$ANYKERNEL_CACHE_FIXTURE_DIR" "$ANYKERNEL_PACKAGE_FIXTURE_DIR" "$ANYKERNEL_SLOT_FIXTURE_DIR" "$SUSFS_VENDOR_FIXTURE_DIR"' EXIT
 
 mkdir -p "$ZEROMOUNT_FIXTURE_DIR/fs"
 cat > "$ZEROMOUNT_FIXTURE_DIR/fs/stat.c" <<'EOF'
@@ -592,6 +603,15 @@ grep -q '^CONFIG_KSU_SUSFS_SUS_MAP=y$' "$KPM_CONFIG_FIXTURE" || fail "combined p
 grep -q '^CONFIG_KSU_SUSFS_OPEN_REDIRECT=y$' "$KPM_CONFIG_FIXTURE" || fail "combined preset SUSFS redirect config"
 grep -q '^CONFIG_KEYS=y$' "$KPM_CONFIG_FIXTURE" || fail "combined preset NoMount key config"
 grep -q '^CONFIG_NOMOUNT=y$' "$KPM_CONFIG_FIXTURE" || fail "combined preset NoMount config"
+
+KSU_TYPE="KernelSU-Next-with-susfs-nomount"
+apply_variant_configs "$KSUN_NOMOUNT_CONFIG_FIXTURE"
+grep -q '^CONFIG_KSU_SUSFS=y$' "$KSUN_NOMOUNT_CONFIG_FIXTURE" || fail "KernelSU-Next NoMount SUSFS config"
+grep -q '^CONFIG_KEYS=y$' "$KSUN_NOMOUNT_CONFIG_FIXTURE" || fail "KernelSU-Next NoMount key config"
+grep -q '^CONFIG_NOMOUNT=y$' "$KSUN_NOMOUNT_CONFIG_FIXTURE" || fail "KernelSU-Next NoMount config"
+if grep -q '^CONFIG_ZEROMOUNT=y$' "$KSUN_NOMOUNT_CONFIG_FIXTURE"; then
+  fail "KernelSU-Next NoMount preset must not enable ZeroMount"
+fi
 
 KSU_TYPE="SukiSU-Ultra-with-susfs-zeromount-KPM"
 apply_variant_configs "$ZEROMOUNT_CONFIG_FIXTURE"

@@ -231,6 +231,7 @@ resolve_root_solution() {
     "Official KernelSU") KSU_TYPE="Official-KernelSU" ;;
     "KernelSU-Next") KSU_TYPE="KernelSU-Next" ;;
     "KernelSU-Next + SUSFS") KSU_TYPE="KernelSU-Next-with-susfs" ;;
+    "KernelSU-Next + SUSFS + NoMount (experimental)") KSU_TYPE="KernelSU-Next-with-susfs-nomount" ;;
     "KernelSU-Next + SUSFS + ZeroMount (experimental)") KSU_TYPE="KernelSU-Next-with-susfs-zeromount" ;;
     "KowSU") KSU_TYPE="KowSU" ;;
     "SukiSU Ultra + KPM (experimental)") KSU_TYPE="SukiSU-Ultra-with-KPM" ;;

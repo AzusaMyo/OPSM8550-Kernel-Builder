@@ -91,7 +91,7 @@ install_ksu_variant() {
       : "${KSU_COMMIT:?KSU_COMMIT must be resolved for KernelSU-Next}"
       setup_kernelsu_repo "KernelSU-Next" "KernelSU-Next" "$KSU_COMMIT"
       ;;
-    "KernelSU-Next-with-susfs"|"KernelSU-Next-with-susfs-zeromount")
+    "KernelSU-Next-with-susfs"|"KernelSU-Next-with-susfs-nomount"|"KernelSU-Next-with-susfs-zeromount")
       : "${KSU_COMMIT:?KSU_COMMIT must be resolved for KernelSU-Next with SUSFS}"
       setup_kernelsu_repo "pershoot" "KernelSU-Next" "$KSU_COMMIT"
       ;;

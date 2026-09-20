@@ -35,7 +35,7 @@ jobs:
       max-parallel: 3
       matrix:
         integration:
-          - KernelSU-Next + SUSFS
+          - KernelSU-Next + SUSFS + NoMount (experimental)
           - ReSukiSU + SUSFS + NoMount (experimental)
           - SukiSU Ultra + SUSFS + NoMount + KPM (experimental)
           - SukiSU Ultra + SUSFS + ZeroMount + KPM (experimental)

@@ -82,6 +82,7 @@ Available workflow presets:
 | `Official KernelSU` | Official KernelSU | Supported |
 | `KernelSU-Next` | KernelSU-Next | Supported |
 | `KernelSU-Next + SUSFS` | KernelSU-Next with SUSFS | Supported |
+| `KernelSU-Next + SUSFS + NoMount (experimental)` | KernelSU-Next with SUSFS and NoMount | Experimental |
 | `KernelSU-Next + SUSFS + ZeroMount (experimental)` | KernelSU-Next with SUSFS and ZeroMount | Experimental |
 | `KowSU` | KowSU | Supported |
 | `SukiSU Ultra + KPM (experimental)` | SukiSU Ultra with KPM | Experimental |
@@ -94,9 +95,10 @@ Available workflow presets:
 | `ReSukiSU + SUSFS + NoMount (experimental)` | ReSukiSU with SUSFS and NoMount | Experimental |
 
 Selecting `Build all 3 featured SUSFS variants (batch)` starts a three-entry
-matrix with the existing NoMount/SUSFS combinations. Selecting `Build all 3
-ZeroMount variants (batch)` instead builds `SukiSU Ultra + SUSFS + ZeroMount +
-KPM`, `ReSukiSU + SUSFS + ZeroMount`, and `KernelSU-Next + SUSFS + ZeroMount`.
+matrix in which all three SUSFS integrations also include NoMount. Selecting
+`Build all 3 ZeroMount variants (batch)` instead builds `SukiSU Ultra + SUSFS +
+ZeroMount + KPM`, `ReSukiSU + SUSFS + ZeroMount`, and
+`KernelSU-Next + SUSFS + ZeroMount`.
 Each entry keeps its own package and diagnostics artifact; release mode publishes
 all three builds under the same immutable release tag.
 
@@ -127,8 +129,9 @@ compatibility checks keep the KPM symbol resolver linked and initialized and
 preserve SukiSU's WebView zygote policy after the SUSFS patch. Unknown patch
 rejects fail closed and are included in diagnostics.
 
-The KernelSU-Next + SUSFS preset resolves `pershoot/KernelSU-Next@dev-susfs`
-to an exact commit. The regular KernelSU-Next preset remains on the official
+The KernelSU-Next + SUSFS presets, including the NoMount and ZeroMount variants,
+resolve `pershoot/KernelSU-Next@dev-susfs` to an exact commit. The regular
+KernelSU-Next preset remains on the official
 `KernelSU-Next/KernelSU-Next@dev` branch. The compatibility branch is required
 because the SUSFS KernelSU-side patch does not apply to the current official
 development tree; the pipeline still takes the kernel-side SUSFS files and
@@ -247,7 +250,8 @@ Pushes and pull requests run:
 
 `Check upstream health` runs every Monday and can also be started manually. It
 resolves exact commits for all twelve profiles, then runs a twenty-five-job
-smoke-test matrix: KernelSU-Next + SUSFS, SukiSU Ultra + SUSFS + NoMount + KPM
+smoke-test matrix: KernelSU-Next + SUSFS + NoMount, SukiSU Ultra + SUSFS +
+NoMount + KPM
 (including the crDroid OnePlus 12 / Android 6.1 vendor include drift),
 and ReSukiSU + SUSFS + NoMount are validated on representative SM7550 (including
 both CE4 source families), SM8450, SM8550, and SM8650 sources, with an additional
