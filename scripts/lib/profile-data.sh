@@ -139,11 +139,12 @@ resolve_build_profile() {
       DEVICE_NAMES="waffle OP5929L1 OP595DL1"
       KERNEL_SOURCE="LineageOS"
       SOURCE_LAYOUT="community-flat"
-      # Match the device tree's TARGET_KERNEL_ADDITIONAL_FLAGS. This option is
+      # Match both TARGET_KERNEL_ADDITIONAL_FLAGS assignments from the common
+      # SM8650 and device-specific waffle BoardConfig files. These options are
       # deliberately passed on every make invocation rather than written into
       # a shared defconfig so the kernel and its ROM-built external modules see
       # the same device configuration.
-      KERNEL_MAKE_FLAGS="CONFIG_OPLUS_DEVICE_DTBS=y"
+      KERNEL_MAKE_FLAGS="CONFIG_OPLUS_DEVICE_DTBS=y CONFIG_WAFFLE_DTB=y"
       ;;
     "SM8650 | OnePlus 12 | crDroid")
       PROFILE_ID="sm8650-oneplus12-crdroid"
@@ -153,7 +154,7 @@ resolve_build_profile() {
       DEVICE_NAMES="waffle OP5929L1 OP595DL1"
       KERNEL_SOURCE="crdroidandroid"
       SOURCE_LAYOUT="community-flat"
-      KERNEL_MAKE_FLAGS="CONFIG_OPLUS_DEVICE_DTBS=y"
+      KERNEL_MAKE_FLAGS="CONFIG_OPLUS_DEVICE_DTBS=y CONFIG_WAFFLE_DTB=y"
       ;;
     *)
       echo "::error::Unknown build profile: $profile"

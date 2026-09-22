@@ -148,9 +148,9 @@ assert_eq "sm8550" "$UPSTREAM_SOC" "Nord CE4 crDroid upstream repository SoC"
 assert_eq "CONFIG_OPLUS_DEVICE_DTBS=y CONFIG_BENZ_DTB=y" "$KERNEL_MAKE_FLAGS" "Nord CE4 crDroid make flags"
 
 resolve_build_profile "SM8650 | OnePlus 12 | LineageOS (recommended)"
-assert_eq "CONFIG_OPLUS_DEVICE_DTBS=y" "$KERNEL_MAKE_FLAGS" "OnePlus 12 LineageOS make flags"
+assert_eq "CONFIG_OPLUS_DEVICE_DTBS=y CONFIG_WAFFLE_DTB=y" "$KERNEL_MAKE_FLAGS" "OnePlus 12 LineageOS make flags"
 resolve_build_profile "SM8650 | OnePlus 12 | crDroid"
-assert_eq "CONFIG_OPLUS_DEVICE_DTBS=y" "$KERNEL_MAKE_FLAGS" "OnePlus 12 crDroid make flags"
+assert_eq "CONFIG_OPLUS_DEVICE_DTBS=y CONFIG_WAFFLE_DTB=y" "$KERNEL_MAKE_FLAGS" "OnePlus 12 crDroid make flags"
 grep -Fq 'device_kernel_make_flags: ($kernel_make_flags | split(" ") | map(select(length > 0)))' "$ANYKERNEL_PACKAGE_SCRIPT" \
   || fail "build provenance does not record device kernel make flags"
 grep -Fq "out/Module.symvers" "$WORKFLOW_FILE" \
