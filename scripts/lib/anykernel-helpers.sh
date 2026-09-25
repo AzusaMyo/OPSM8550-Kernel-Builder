@@ -258,23 +258,33 @@ install_anykernel_arm64_busybox() {
   install_anykernel_arm64_binary "$1" "$2" BusyBox
 }
 
-install_anykernel_arm64_magiskboot() {
+install_anykernel_arm64_magisk_tools() {
   local apk_url="$1"
   local expected_apk_sha256="$2"
   local expected_magiskboot_sha256="$3"
-  local destination="$4"
+  local magiskboot_destination="$4"
   local local_apk="${5:-}"
+  local busybox_destination="${6:-}"
+  local expected_busybox_sha256="${7:-}"
+
+  if [[ -n "$busybox_destination" && -z "$expected_busybox_sha256" ]] ||
+     [[ -z "$busybox_destination" && -n "$expected_busybox_sha256" ]]; then
+    echo "::error::Magisk BusyBox destination and checksum must be supplied together."
+    return 1
+  fi
 
   (
     set -e
     local temp_dir
     local apk_file
     local magiskboot_file
+    local busybox_file
 
     temp_dir="$(mktemp -d)"
     trap 'rm -rf "$temp_dir"' EXIT
     apk_file="$temp_dir/Magisk.apk"
     magiskboot_file="$temp_dir/magiskboot"
+    busybox_file="$temp_dir/busybox"
 
     if [[ -n "$local_apk" ]]; then
       cp "$local_apk" "$apk_file"
@@ -290,7 +300,15 @@ install_anykernel_arm64_magiskboot() {
       echo "::error::arm64 MagiskBoot checksum verification failed."
       return 1
     }
-    install_anykernel_arm64_binary "$magiskboot_file" "$destination" MagiskBoot
+    install_anykernel_arm64_binary "$magiskboot_file" "$magiskboot_destination" MagiskBoot
+    if [[ -n "$busybox_destination" ]]; then
+      unzip -p "$apk_file" lib/arm64-v8a/libbusybox.so > "$busybox_file"
+      printf '%s  %s\n' "$expected_busybox_sha256" "$busybox_file" | sha256sum --check --status || {
+        echo "::error::arm64 BusyBox checksum verification failed."
+        return 1
+      }
+      install_anykernel_arm64_binary "$busybox_file" "$busybox_destination" BusyBox
+    fi
   )
 }
 

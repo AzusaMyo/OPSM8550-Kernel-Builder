@@ -51,6 +51,7 @@ MAGISK_TOOLS_VERSION="${MAGISK_TOOLS_VERSION:-30.7}"
 MAGISK_APK_URL="${MAGISK_APK_URL:-https://github.com/topjohnwu/Magisk/releases/download/v30.7/Magisk-v30.7.apk}"
 MAGISK_APK_SHA256="${MAGISK_APK_SHA256:-e0d32d2123532860f97123d927b1bb86c4e08e6fd8a48bfc6b5bee0afae9ebd5}"
 MAGISKBOOT_ARM64_SHA256="${MAGISKBOOT_ARM64_SHA256:-d7440e2cd89899426e809554bf793baef9804ccbe5a52ce34a8b6242725d3c77}"
+MAGISK_BUSYBOX_ARM64_SHA256="${MAGISK_BUSYBOX_ARM64_SHA256:-4d60ab3f5a59ebb2ca863f2f514e6924401b581e9b64f602665c008177626651}"
 MAGISK_APK_PATH="${MAGISK_APK_PATH:-}"
 
 SHORT_KERNEL_COMMIT="${KERNEL_COMMIT:0:12}"
@@ -59,6 +60,10 @@ ASSET_DIR="${GITHUB_WORKSPACE:-$(pwd)}/release-assets"
 KPM_ENABLED=false
 if [[ "$KSU_TYPE" == *KPM* ]]; then
   KPM_ENABLED=true
+fi
+ARM64_TOOLSET=false
+if [[ "$KPM_ENABLED" == true || "$SOC" == sm8650 ]]; then
+  ARM64_TOOLSET=true
 fi
 
 {
@@ -109,12 +114,19 @@ if [[ "$KPM_ENABLED" == true ]]; then
   KSU_CHECKOUT_NAME="$(basename "${KSU_REPO%.git}")"
   KSU_ARM64_BUSYBOX="${SOC}/${KSU_CHECKOUT_NAME}/userspace/ksud/bin/aarch64/busybox"
   install_anykernel_arm64_busybox "$KSU_ARM64_BUSYBOX" "AnyKernel3/tools/busybox"
-  install_anykernel_arm64_magiskboot \
-    "$MAGISK_APK_URL" \
-    "$MAGISK_APK_SHA256" \
-    "$MAGISKBOOT_ARM64_SHA256" \
-    "AnyKernel3/tools/magiskboot" \
+fi
+if [[ "$ARM64_TOOLSET" == true ]]; then
+  MAGISK_TOOL_ARGS=(
+    "$MAGISK_APK_URL"
+    "$MAGISK_APK_SHA256"
+    "$MAGISKBOOT_ARM64_SHA256"
+    "AnyKernel3/tools/magiskboot"
     "$MAGISK_APK_PATH"
+  )
+  if [[ "$KPM_ENABLED" != true ]]; then
+    MAGISK_TOOL_ARGS+=("AnyKernel3/tools/busybox" "$MAGISK_BUSYBOX_ARM64_SHA256")
+  fi
+  install_anykernel_arm64_magisk_tools "${MAGISK_TOOL_ARGS[@]}"
   prepare_anykernel_arm64_toolset "AnyKernel3/tools"
   ANYKERNEL_BUSYBOX_ABI="arm64"
 fi
@@ -123,7 +135,7 @@ ANYKERNEL_MAGISKBOOT_SHA256="$(sha256sum AnyKernel3/tools/magiskboot | awk '{pri
 add_anykernel_preflight_diagnostics \
   "$ANYKERNEL_UPDATE_BINARY" \
   "$ANYKERNEL_BUSYBOX_ABI" \
-  "$KPM_ENABLED"
+  "$ARM64_TOOLSET"
 
 rm -rf "$ASSET_DIR"
 mkdir -p "$ASSET_DIR"

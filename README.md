@@ -197,11 +197,13 @@ its ramdisk, and replaces only the kernel Image. This supports newer devices suc
 where the first-stage ramdisk lives in `init_boot` and `boot` legitimately has
 no ramdisk, while preserving a boot ramdisk when one is present. Upstream
 AnyKernel example-device paths and demo ramdisk edits are not included. KPM
-packages replace AnyKernel's legacy 32-bit ARM BusyBox and
-MagiskBoot with verified AArch64 builds. BusyBox comes from the exact SukiSU
-source revision used by the build; MagiskBoot comes from a pinned official
-Magisk APK with both archive and extracted-binary SHA-256 verification. On
-arm64-only SoCs such as the Snapdragon 8 Gen 3 in OnePlus 12, the installer
+packages and all Snapdragon 8 Gen 3 packages replace AnyKernel's legacy
+32-bit ARM BusyBox and MagiskBoot with verified AArch64 builds. For KPM,
+BusyBox comes from the exact SukiSU source revision used by the build. Other
+Snapdragon 8 Gen 3 packages take BusyBox from the pinned official Magisk APK;
+MagiskBoot comes from that APK for both. The archive and extracted binaries
+have SHA-256 verification. On arm64-only SoCs such as the Snapdragon 8 Gen 3
+in OnePlus 12, the installer
 also discards the manager app's incompatible ARM32 `mkbootfs` injection and
 uses BusyBox `cpio` instead. Other unused ARM32 AnyKernel partition utilities
 are removed, and packaging fails if any remaining native runtime tool is not
