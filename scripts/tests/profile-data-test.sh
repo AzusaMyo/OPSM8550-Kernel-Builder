@@ -127,8 +127,8 @@ awk '
 
 expected_socs=(sm7550 sm7550 sm8450 sm8450 sm8550 sm8550 sm8550 sm8550 sm8550 sm8650 sm8650 sm8650)
 expected_upstream_socs=(sm8550 sm8550 sm8450 sm8450 sm8550 sm8550 sm8550 sm8550 sm8550 sm8650 sm8650 sm8650)
-expected_codenames=(benz benz negroni ovaltine salami salami "salami aston" "salami aston" aston waffle waffle waffle)
-expected_devices=("benz OP5D3FL1 CPH2613" "benz OP5D3FL1 CPH2613" "negroni OP516EL1 OP516FL1" "ovaltine OP5551L1 OP5552L1" "salami OP591BL1 OP594DL1" "salami OP591BL1 OP594DL1" "salami OP591BL1 OP594DL1 aston OP5D35L1" "salami OP591BL1 OP594DL1 aston OP5D35L1" "aston OP5D35L1" "waffle OP5929L1 OP595DL1" "waffle OP5929L1 OP595DL1" "waffle OP5929L1 OP595DL1")
+expected_codenames=(benz benz negroni ovaltine salami salami "salami aston astonc" "salami aston astonc" "aston astonc" waffle waffle waffle)
+expected_devices=("benz OP5D3FL1 CPH2613" "benz OP5D3FL1 CPH2613" "negroni OP516EL1 OP516FL1" "ovaltine OP5551L1 OP5552L1" "salami OP591BL1 OP594DL1" "salami OP591BL1 OP594DL1" "salami OP591BL1 OP594DL1 aston OP5D35L1 astonc OP5CF9L1" "salami OP591BL1 OP594DL1 aston OP5D35L1 astonc OP5CF9L1" "aston OP5D35L1 astonc OP5CF9L1" "waffle OP5929L1 OP595DL1" "waffle OP5929L1 OP595DL1" "waffle OP5929L1 OP595DL1")
 
 for i in "${!profiles[@]}"; do
   resolve_build_profile "${profiles[$i]}"
@@ -688,9 +688,11 @@ printf '%s\n' \
   'device.name3=' \
   'device.name4=' \
   'device.name5=' \
+  'device.name6=' \
+  'device.name7=' \
   'supported.versions=' > "$ANYKERNEL_FIXTURE"
 chmod 755 "$ANYKERNEL_FIXTURE"
-configure_anykernel_properties "$ANYKERNEL_FIXTURE" "Test Kernel" "salami OP591BL1 OP594DL1 aston OP5D35L1" "16"
+configure_anykernel_properties "$ANYKERNEL_FIXTURE" "Test Kernel" "salami OP591BL1 OP594DL1 aston OP5D35L1 astonc OP5CF9L1" "16"
 assert_eq "755" "$(stat -c '%a' "$ANYKERNEL_FIXTURE")" "AnyKernel script permissions"
 grep -q '^kernel.string=Test Kernel$' "$ANYKERNEL_FIXTURE" || fail "AnyKernel string"
 grep -q '^do.devicecheck=1$' "$ANYKERNEL_FIXTURE" || fail "AnyKernel device check"
@@ -698,6 +700,8 @@ grep -q '^device.name1=salami$' "$ANYKERNEL_FIXTURE" || fail "AnyKernel salami m
 grep -q '^device.name2=OP591BL1$' "$ANYKERNEL_FIXTURE" || fail "AnyKernel stock ID mapping"
 grep -q '^device.name4=aston$' "$ANYKERNEL_FIXTURE" || fail "AnyKernel aston mapping"
 grep -q '^device.name5=OP5D35L1$' "$ANYKERNEL_FIXTURE" || fail "AnyKernel 12R stock ID mapping"
+grep -q '^device.name6=astonc$' "$ANYKERNEL_FIXTURE" || fail "AnyKernel Ace 3 codename mapping"
+grep -q '^device.name7=OP5CF9L1$' "$ANYKERNEL_FIXTURE" || fail "AnyKernel Ace 3 stock ID mapping"
 grep -q '^supported.versions=16$' "$ANYKERNEL_FIXTURE" || fail "AnyKernel Android mapping"
 
 git -C "$ANYKERNEL_CACHE_FIXTURE_DIR" init -q
@@ -731,6 +735,8 @@ printf '%s\n' \
   'device.name3=' \
   'device.name4=' \
   'device.name5=' \
+  'device.name6=' \
+  'device.name7=' \
   'supported.versions=' \
   > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source/anykernel.sh"
 printf '%s\n' \
@@ -891,7 +897,7 @@ for i in "${!profiles[@]}"; do
     "$DEVICE_NAMES" \
     "16"
   for device_name in $DEVICE_NAMES; do
-    grep -q "^device.name[1-5]=${device_name}$" "$ANYKERNEL_FIXTURE" \
+    grep -q "^device.name[1-7]=${device_name}$" "$ANYKERNEL_FIXTURE" \
       || fail "${profiles[$i]} did not inject device ID: $device_name"
   done
 done

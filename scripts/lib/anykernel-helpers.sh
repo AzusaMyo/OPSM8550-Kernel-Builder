@@ -141,8 +141,8 @@ configure_anykernel_properties() {
     echo "::error::At least one AnyKernel3 device codename is required."
     return 1
   }
-  [[ "${#devices[@]}" -le 5 ]] || {
-    echo "::error::AnyKernel3 helper currently supports at most five device codenames."
+  [[ "${#devices[@]}" -le 7 ]] || {
+    echo "::error::AnyKernel3 helper currently supports at most seven device IDs."
     return 1
   }
 
@@ -150,14 +150,14 @@ configure_anykernel_properties() {
   set_ak_property "$file" do.devicecheck 1
   set_ak_property "$file" supported.versions "$android_versions"
 
-  for index in 1 2 3 4 5; do
+  for index in 1 2 3 4 5 6 7; do
     device_value="${devices[$((index - 1))]:-}"
     set_ak_property "$file" "device.name${index}" "$device_value"
   done
 
   grep -q '^do.devicecheck=1$' "$file"
   for device_name in "${devices[@]}"; do
-    grep -q "^device.name[1-5]=${device_name}$" "$file"
+    grep -q "^device.name[1-7]=${device_name}$" "$file"
   done
 }
 

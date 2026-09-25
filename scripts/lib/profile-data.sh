@@ -99,8 +99,8 @@ resolve_build_profile() {
       PROFILE_ID="sm8550-oneplus11-12r-lineage"
       SOC="sm8550"
       TARGET_NAME="OnePlus 11 / 12R"
-      DEVICE_CODENAMES="salami aston"
-      DEVICE_NAMES="salami OP591BL1 OP594DL1 aston OP5D35L1"
+      DEVICE_CODENAMES="salami aston astonc"
+      DEVICE_NAMES="salami OP591BL1 OP594DL1 aston OP5D35L1 astonc OP5CF9L1"
       KERNEL_SOURCE="LineageOS"
       SOURCE_LAYOUT="community-flat"
       ;;
@@ -108,8 +108,8 @@ resolve_build_profile() {
       PROFILE_ID="sm8550-oneplus11-12r-crdroid"
       SOC="sm8550"
       TARGET_NAME="OnePlus 11 / 12R"
-      DEVICE_CODENAMES="salami aston"
-      DEVICE_NAMES="salami OP591BL1 OP594DL1 aston OP5D35L1"
+      DEVICE_CODENAMES="salami aston astonc"
+      DEVICE_NAMES="salami OP591BL1 OP594DL1 aston OP5D35L1 astonc OP5CF9L1"
       KERNEL_SOURCE="crdroidandroid"
       SOURCE_LAYOUT="community-flat"
       ;;
@@ -117,8 +117,8 @@ resolve_build_profile() {
       PROFILE_ID="sm8550-oneplus12r-dev"
       SOC="sm8550"
       TARGET_NAME="OnePlus 12R"
-      DEVICE_CODENAMES="aston"
-      DEVICE_NAMES="aston OP5D35L1"
+      DEVICE_CODENAMES="aston astonc"
+      DEVICE_NAMES="aston OP5D35L1 astonc OP5CF9L1"
       KERNEL_SOURCE="OnePlus12R-development"
       SOURCE_LAYOUT="community-flat"
       ;;
