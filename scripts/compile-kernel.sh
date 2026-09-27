@@ -208,11 +208,11 @@ fi
 CONFIG_SECONDS=$(($(date +%s) - CONFIG_STARTED_AT))
 
 if [[ "$BUILD_MODE" == "Patch/config validation only" ]]; then
-  BUILD_PHASE="host-tool smoke compile"
+  BUILD_PHASE="certificate directory smoke compile"
   COMPILE_STARTED_AT="$(date +%s)"
-  if ! make "${MAKE_ARGS[@]}" certs/extract-cert; then
+  if ! make "${MAKE_ARGS[@]}" certs/; then
     COMPILE_SECONDS=$(($(date +%s) - COMPILE_STARTED_AT))
-    echo "::error::Kernel certificate host-tool smoke compile failed."
+    echo "::error::Kernel certificate directory smoke compile failed."
     exit 1
   fi
   COMPILE_SECONDS=$(($(date +%s) - COMPILE_STARTED_AT))

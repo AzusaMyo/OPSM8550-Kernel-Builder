@@ -82,8 +82,8 @@ grep -Fq 'clone_repo "$MODULES_REPO" "$MODULES_BRANCH"' "${SCRIPT_DIR}/../clone-
   || fail "modules checkout must use its independently resolved branch"
 grep -Fq 'MAKE_ARGS+=("${KERNEL_MAKE_FLAG_ARRAY[@]}")' "$COMPILE_SCRIPT" \
   || fail "compile script must pass profile-specific flags to every make invocation"
-grep -Fq 'make "${MAKE_ARGS[@]}" certs/extract-cert' "$COMPILE_SCRIPT" \
-  || fail "validation mode must smoke-compile the kernel certificate host tool"
+grep -Fq 'make "${MAKE_ARGS[@]}" certs/' "$COMPILE_SCRIPT" \
+  || fail "validation mode must smoke-compile the kernel certificate directory"
 grep -Fq 'local max_attempts=5' "$GIT_HELPERS_SCRIPT" \
   || fail "git network helpers must tolerate a longer transient outage"
 grep -Fq 'GIT_TERMINAL_PROMPT=0 git ls-remote' "$GIT_HELPERS_SCRIPT" \
