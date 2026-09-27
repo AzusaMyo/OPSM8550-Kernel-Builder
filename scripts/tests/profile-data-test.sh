@@ -155,8 +155,12 @@ grep -Fq 'device_kernel_make_flags: ($kernel_make_flags | split(" ") | map(selec
   || fail "build provenance does not record device kernel make flags"
 grep -Fq "out/Module.symvers" "$WORKFLOW_FILE" \
   || fail "diagnostics do not retain the kernel module CRC table"
-grep -Fq "it does not replace the ROM's vendor_dlkm modules" "$ANYKERNEL_PACKAGE_SCRIPT" \
-  || fail "release notes do not warn about the retained ROM vendor modules"
+grep -Fq "it does not replace the ROM's system_dlkm or vendor_dlkm modules" "$ANYKERNEL_PACKAGE_SCRIPT" \
+  || fail "release notes do not warn about the retained ROM modules"
+grep -Fq 'INPUT_ROM_GKI_MODULE_COMPAT: ${{ inputs.rom_gki_module_compat }}' "$WORKFLOW_FILE" \
+  || fail "workflow does not pass the selected ROM GKI module compatibility mode"
+grep -Fq 'rom_gki_module_compat: $rom_gki_module_compat' "$ANYKERNEL_PACKAGE_SCRIPT" \
+  || fail "package provenance does not record ROM GKI module compatibility"
 
 resolve_build_profile "SM8550 | OnePlus 11 | LunarisOS"
 assert_eq "https://github.com/osm1019/kernel_oneplus_sm8550.git" "$KERNEL_REPO_OVERRIDE" "LunarisOS kernel repository"
@@ -661,6 +665,23 @@ apply_variant_configs "$MODULE_CONFIG_FIXTURE"
 assert_eq "$MODULE_ABI_SNAPSHOT" \
   "$(grep -E "$MODULE_ABI_PATTERN" "$MODULE_CONFIG_FIXTURE")" \
   "root presets must preserve vendor ABI-sensitive configs"
+printf '%s\n' 'CONFIG_MODULE_SIG=y' '# CONFIG_MODULE_SIG_FORCE is not set' \
+  'CONFIG_MODULE_SIG_PROTECT=y' >> "$MODULE_CONFIG_FIXTURE"
+ROM_GKI_MODULE_COMPAT=0
+MODULE_CONFIG_HASH="$(sha256sum "$MODULE_CONFIG_FIXTURE" | cut -d' ' -f1)"
+apply_rom_gki_module_compat_config "$MODULE_CONFIG_FIXTURE"
+assert_eq "$MODULE_CONFIG_HASH" \
+  "$(sha256sum "$MODULE_CONFIG_FIXTURE" | cut -d' ' -f1)" \
+  "strict mode must preserve GKI protection"
+ROM_GKI_MODULE_COMPAT=1
+apply_rom_gki_module_compat_config "$MODULE_CONFIG_FIXTURE"
+grep -Fqx '# CONFIG_MODULE_SIG_PROTECT is not set' "$MODULE_CONFIG_FIXTURE" \
+  || fail "ROM compatibility mode did not disable GKI module protection"
+grep -Fqx 'CONFIG_MODULE_SIG=y' "$MODULE_CONFIG_FIXTURE" \
+  || fail "ROM compatibility mode disabled module signature verification"
+grep -Fqx '# CONFIG_MODULE_SIG_FORCE is not set' "$MODULE_CONFIG_FIXTURE" \
+  || fail "ROM compatibility mode changed required module signatures"
+ROM_GKI_MODULE_COMPAT=0
 grep -Fq 'write_kernel_scmversion "$KERNEL_COMMIT"' "$COMPILE_SCRIPT" \
   || fail "full builds do not pin the ROM-compatible kernel release suffix"
 if grep -Fq 'touch .scmversion' "$COMPILE_SCRIPT"; then

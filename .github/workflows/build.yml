@@ -103,6 +103,14 @@ on:
           - Patch/config validation only
           - Full build (artifact only)
           - Full build and publish release
+      rom_gki_module_compat:
+        description: OP12 crDroid only; allow the ROM's system_dlkm modules with a custom Image (reduces GKI module protection)
+        required: true
+        type: choice
+        default: Strict GKI module checks (default)
+        options:
+          - Strict GKI module checks (default)
+          - Use existing ROM system_dlkm modules (experimental)
 
 permissions:
   contents: read
@@ -157,7 +165,7 @@ jobs:
       matrix:
         root_solution: ${{ fromJSON(inputs.root_solution == 'Build all 3 featured SUSFS variants (batch)' && '["SukiSU Ultra + SUSFS + NoMount + KPM (experimental)","ReSukiSU + SUSFS + NoMount (experimental)","KernelSU-Next + SUSFS + NoMount (experimental)"]' || inputs.root_solution == 'Build all 3 ZeroMount variants (batch)' && '["SukiSU Ultra + SUSFS + ZeroMount + KPM (experimental)","ReSukiSU + SUSFS + ZeroMount (experimental)","KernelSU-Next + SUSFS + ZeroMount (experimental)"]' || format('["{0}"]', inputs.root_solution)) }}
     concurrency:
-      group: kernel-ci-${{ github.ref_name }}-${{ inputs.build_profile }}-${{ matrix.root_solution }}-${{ inputs.branch_mode }}-${{ inputs.kernel_branch }}-${{ inputs.build_mode }}
+      group: kernel-ci-${{ github.ref_name }}-${{ inputs.build_profile }}-${{ matrix.root_solution }}-${{ inputs.branch_mode }}-${{ inputs.kernel_branch }}-${{ inputs.rom_gki_module_compat }}-${{ inputs.build_mode }}
       cancel-in-progress: true
 
     env:
@@ -178,6 +186,7 @@ jobs:
           INPUT_CLANG_CHOICE: ${{ inputs.clang_choice }}
           INPUT_ROOT_SOLUTION: ${{ matrix.root_solution }}
           INPUT_BUILD_MODE: ${{ inputs.build_mode }}
+          INPUT_ROM_GKI_MODULE_COMPAT: ${{ inputs.rom_gki_module_compat }}
         run: bash scripts/resolve-profile.sh
 
       - name: Set build metadata
@@ -188,7 +197,7 @@ jobs:
           BUILD_TIMESTAMP="$(date -u +'%Y%m%d_%H%M%S')"
           ARTIFACT_NAME="kernel-package-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${KSU_TYPE}"
           DIAGNOSTICS_NAME="kernel-diagnostics-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${KSU_TYPE}"
-          CCACHE_KEY_PREFIX="${RUNNER_OS}-ccache-v2-${SOC}-${SOURCE_SLUG}-${PROFILE_ID}-${SAFE_KERNEL_BRANCH}-${CLANG_VERSION}-${KSU_TYPE}"
+          CCACHE_KEY_PREFIX="${RUNNER_OS}-ccache-v2-${SOC}-${SOURCE_SLUG}-${PROFILE_ID}-${SAFE_KERNEL_BRANCH}-${CLANG_VERSION}-${KSU_TYPE}-${ROM_GKI_MODULE_COMPAT}"
           CCACHE_EPOCH="$(date -u +'%G-W%V')"
           {
             echo "BUILD_TIMESTAMP=${BUILD_TIMESTAMP}"

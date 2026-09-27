@@ -30,6 +30,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 SUPPORTED_ANDROID_VERSIONS="${SUPPORTED_ANDROID_VERSIONS:-}"
 KERNEL_MAKE_FLAGS="${KERNEL_MAKE_FLAGS:-}"
+ROM_GKI_MODULE_COMPAT="${ROM_GKI_MODULE_COMPAT:-0}"
+case "$ROM_GKI_MODULE_COMPAT" in
+  0|1) ;;
+  *) echo "::error::Invalid ROM GKI module compatibility value: $ROM_GKI_MODULE_COMPAT"; exit 1 ;;
+esac
 KSU_COMMIT="${KSU_COMMIT:-}"
 KSU_REPO="${KSU_REPO:-}"
 KSU_REF="${KSU_REF:-}"
@@ -55,6 +60,9 @@ MAGISK_APK_PATH="${MAGISK_APK_PATH:-}"
 
 SHORT_KERNEL_COMMIT="${KERNEL_COMMIT:0:12}"
 ZIP_NAME="${PROFILE_ID}_${KSU_TYPE}_${SHORT_KERNEL_COMMIT}_${BUILD_TIMESTAMP}"
+if [[ "$ROM_GKI_MODULE_COMPAT" == 1 ]]; then
+  ZIP_NAME="${ZIP_NAME}_rom-gki-compat"
+fi
 ASSET_DIR="${GITHUB_WORKSPACE:-$(pwd)}/release-assets"
 KPM_ENABLED=false
 if [[ "$KSU_TYPE" == *KPM* ]]; then
@@ -142,6 +150,7 @@ jq -n \
   --arg modules_commit "$MODULES_COMMIT" \
   --arg clang "$CLANG_VERSION" \
   --arg kernel_make_flags "$KERNEL_MAKE_FLAGS" \
+  --argjson rom_gki_module_compat "$([[ "$ROM_GKI_MODULE_COMPAT" == 1 ]] && echo true || echo false)" \
   --arg root_solution "$KSU_TYPE" \
   --argjson kpm_enabled "$KPM_ENABLED" \
   --arg ksu_repo "$KSU_REPO" \
@@ -179,6 +188,7 @@ jq -n \
     modules_commit: $modules_commit,
     clang: $clang,
     device_kernel_make_flags: ($kernel_make_flags | split(" ") | map(select(length > 0))),
+    rom_gki_module_compat: $rom_gki_module_compat,
     root_solution: $root_solution,
     kpm_enabled: $kpm_enabled,
     kernelsu_repository: $ksu_repo,
@@ -242,6 +252,7 @@ cat > "$ASSET_DIR/release-notes.md" <<EOF_NOTES
 - Modules commit: \`${MODULES_COMMIT}\`
 - Clang: ${CLANG_VERSION}
 - Device kernel make flags: ${KERNEL_MAKE_FLAGS:-none}
+- ROM GKI module compatibility: ${ROM_GKI_MODULE_COMPAT}
 - Root solution: ${KSU_TYPE}
 - KernelSU source: ${KSU_REPO:-disabled} (${KSU_REF:-none}, ${KSU_COMMIT:-none})
 - KPM: ${KPM_ENABLED}
@@ -253,8 +264,9 @@ cat > "$ASSET_DIR/release-notes.md" <<EOF_NOTES
 
 The flashable ZIP performs a device-codename check before modifying the boot partition.
 Only flash it on the listed target devices, and keep a known-good stock boot image available.
-This package replaces only the kernel Image; it does not replace the ROM's vendor_dlkm modules.
+This package replaces only the kernel Image; it does not replace the ROM's system_dlkm or vendor_dlkm modules.
 Use it only with a ROM build whose vendor modules match the source, branch, and device flags above.
+When ROM GKI module compatibility is enabled, protected-symbol enforcement is disabled so the ROM's system_dlkm modules may load with this custom Image. Their signatures cannot be authenticated by this Image's newly generated key. This is experimental and reduces GKI module protection.
 See \`build-info.json\` and \`SHA256SUMS\` for provenance and integrity data.
 EOF_NOTES
 
