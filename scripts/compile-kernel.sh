@@ -208,11 +208,11 @@ fi
 CONFIG_SECONDS=$(($(date +%s) - CONFIG_STARTED_AT))
 
 if [[ "$BUILD_MODE" == "Patch/config validation only" ]]; then
-  BUILD_PHASE="certificate directory smoke compile"
+  BUILD_PHASE="host-tool smoke compile"
   COMPILE_STARTED_AT="$(date +%s)"
-  if ! make "${MAKE_ARGS[@]}" certs/; then
+  if ! make "${MAKE_ARGS[@]}" certs/extract-cert; then
     COMPILE_SECONDS=$(($(date +%s) - COMPILE_STARTED_AT))
-    echo "::error::Kernel certificate directory smoke compile failed."
+    echo "::error::Kernel certificate host-tool smoke compile failed."
     exit 1
   fi
   COMPILE_SECONDS=$(($(date +%s) - COMPILE_STARTED_AT))
@@ -224,7 +224,7 @@ if [[ "$BUILD_MODE" == "Patch/config validation only" ]]; then
       fs/namespace.o
       fs/proc/task_mmu.o
       kernel/reboot.o
-      "${KSU_DRIVER_DIR}/kernelsu/"
+      "${KSU_DRIVER_DIR}/kernelsu/kernelsu.o"
     )
   fi
   if [[ "$KSU_TYPE" == *nomount* ]]; then
@@ -244,8 +244,13 @@ if [[ "$BUILD_MODE" == "Patch/config validation only" ]]; then
   fi
   if [[ "$KSU_TYPE" == *KPM* ]]; then
     if [[ "$KSU_TYPE" != *susfs* ]]; then
-      SMOKE_TARGETS+=("${KSU_DRIVER_DIR}/kernelsu/")
+      SMOKE_TARGETS+=("${KSU_DRIVER_DIR}/kernelsu/kernelsu.o")
     fi
+    SMOKE_TARGETS+=(
+      "${KSU_DRIVER_DIR}/kernelsu/kpm/compact.o"
+      "${KSU_DRIVER_DIR}/kernelsu/kpm/kpm.o"
+      "${KSU_DRIVER_DIR}/kernelsu/kpm/super_access.o"
+    )
   fi
 
   if [[ "${#SMOKE_TARGETS[@]}" -gt 0 ]]; then
