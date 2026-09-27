@@ -280,8 +280,8 @@ grep -Fq 'kernel/policy/allowlist.c.rej' "$SUSFS_APPLY_SCRIPT" \
   || fail "SukiSU drift resolver does not guard the allowlist reject"
 grep -Fq 'SukiSU KPM symbol resolver is not linked into kernelsu.o.' "${SCRIPT_DIR}/../lib/verify.sh" \
   || fail "KPM source verification does not check symbol resolver linkage"
-grep -Fq '"${KSU_DRIVER_DIR}/kernelsu/kernelsu.o"' "$COMPILE_SCRIPT" \
-  || fail "KPM smoke compilation does not build the composite KernelSU object"
+grep -Fq '"${KSU_DRIVER_DIR}/kernelsu/"' "$COMPILE_SCRIPT" \
+  || fail "KPM smoke compilation does not build the KernelSU directory"
 grep -Fq 'out/${KSU_DRIVER_DIR}/kernelsu/infra/symbol_resolver.o' "${SCRIPT_DIR}/../lib/verify.sh" \
   || fail "KPM binary verification does not inspect the compiled symbol resolver object"
 grep -Fq 'local llvm_nm="${CLANG_ROOT:?}/llvm-nm"' "${SCRIPT_DIR}/../lib/verify.sh" \

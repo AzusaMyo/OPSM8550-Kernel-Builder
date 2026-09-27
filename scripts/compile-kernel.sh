@@ -224,7 +224,7 @@ if [[ "$BUILD_MODE" == "Patch/config validation only" ]]; then
       fs/namespace.o
       fs/proc/task_mmu.o
       kernel/reboot.o
-      "${KSU_DRIVER_DIR}/kernelsu/kernelsu.o"
+      "${KSU_DRIVER_DIR}/kernelsu/"
     )
   fi
   if [[ "$KSU_TYPE" == *nomount* ]]; then
@@ -244,13 +244,8 @@ if [[ "$BUILD_MODE" == "Patch/config validation only" ]]; then
   fi
   if [[ "$KSU_TYPE" == *KPM* ]]; then
     if [[ "$KSU_TYPE" != *susfs* ]]; then
-      SMOKE_TARGETS+=("${KSU_DRIVER_DIR}/kernelsu/kernelsu.o")
+      SMOKE_TARGETS+=("${KSU_DRIVER_DIR}/kernelsu/")
     fi
-    SMOKE_TARGETS+=(
-      "${KSU_DRIVER_DIR}/kernelsu/kpm/compact.o"
-      "${KSU_DRIVER_DIR}/kernelsu/kpm/kpm.o"
-      "${KSU_DRIVER_DIR}/kernelsu/kpm/super_access.o"
-    )
   fi
 
   if [[ "${#SMOKE_TARGETS[@]}" -gt 0 ]]; then
