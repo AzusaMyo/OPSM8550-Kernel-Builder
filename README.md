@@ -59,6 +59,10 @@ you trust. This can let the existing ROM modules load, but it reduces GKI
 protected-symbol enforcement and does not guarantee
 compatibility if module CRCs or firmware differ. The default remains strict.
 The chosen mode is recorded in `build-info.json` and in the ZIP filename.
+The OnePlus 12 crDroid flashable ZIP also replaces AnyKernel's 32-bit ARM
+BusyBox and MagiskBoot with pinned arm64 versions from Magisk 30.7. The device
+reports `arm64-v8a` and cannot execute the old 32-bit MagiskBoot; the package
+verifies both binary checksums and ELF architecture before creating the ZIP.
 
 The LunarisOS OnePlus 11 profile follows the kernel source published in the
 LunarisOS OTA metadata. Its maintainer kernel uses `lineage-23.2`, while its

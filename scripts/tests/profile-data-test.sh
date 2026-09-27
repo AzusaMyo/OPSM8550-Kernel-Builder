@@ -746,6 +746,7 @@ mkdir -p \
   "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source/tools" \
   "$ANYKERNEL_PACKAGE_FIXTURE_DIR/magisk-apk/lib/arm64-v8a" \
   "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/sm8550/out/arch/arm64/boot" \
+  "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/sm8650/out/arch/arm64/boot" \
   "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/sm8550/SukiSU-Ultra/userspace/ksud/bin/aarch64" \
   "$ANYKERNEL_PACKAGE_FIXTURE_DIR/bin"
 printf '%s\n' \
@@ -789,11 +790,13 @@ git clone -q "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source" "$ANYKERNEL_PACKAGE_FIXTURE
 printf '%s\n' 'kernel.string=dirty-cache' > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/anykernel.sh"
 printf '%s\n' stale > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/Image"
 printf '%s\n' image > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/sm8550/out/arch/arm64/boot/Image"
+printf '%s\n' image > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/sm8650/out/arch/arm64/boot/Image"
 printf '%s\n' sukisu-arm64-busybox > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/sm8550/SukiSU-Ultra/userspace/ksud/bin/aarch64/busybox"
 printf '%s\n' magisk-arm64-magiskboot > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/magisk-apk/lib/arm64-v8a/libmagiskboot.so"
+printf '%s\n' magisk-arm64-busybox > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/magisk-apk/lib/arm64-v8a/libbusybox.so"
 (
   cd "$ANYKERNEL_PACKAGE_FIXTURE_DIR/magisk-apk"
-  zip -q "$ANYKERNEL_PACKAGE_FIXTURE_DIR/Magisk.apk" lib/arm64-v8a/libmagiskboot.so
+  zip -q "$ANYKERNEL_PACKAGE_FIXTURE_DIR/Magisk.apk" lib/arm64-v8a/libmagiskboot.so lib/arm64-v8a/libbusybox.so
 )
 cat > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/bin/jq" <<'EOF'
 #!/usr/bin/env bash
@@ -909,6 +912,50 @@ for package_timestamp in 20260101_000000 20260101_000001; do
     "$(sha256sum "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/META-INF/com/google/android/update-binary" | cut -d' ' -f1)" \
     "AnyKernel preflight diagnostics idempotence"
 done
+
+(
+  cd "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work"
+  PATH="$ANYKERNEL_PACKAGE_FIXTURE_DIR/bin:$PATH" \
+  SOC=sm8650 \
+  PROFILE_ID=sm8650-oneplus12-crdroid \
+  TARGET_NAME='OnePlus 12' \
+  DEVICE_CODENAMES=waffle \
+  DEVICE_NAMES='waffle OP5929L1 OP595DL1' \
+  SUPPORTED_ANDROID_VERSIONS=16 \
+  SOURCE_NAME=crDroid \
+  KERNEL_BRANCH=16.0 \
+  MODULES_BRANCH=16.0 \
+  KERNEL_COMMIT=1111111111111111111111111111111111111111 \
+  MODULES_COMMIT=2222222222222222222222222222222222222222 \
+  CLANG_VERSION=test-clang \
+  KSU_TYPE=KernelSU-Next-with-susfs \
+  ROM_GKI_MODULE_COMPAT=1 \
+  BUILD_TIMESTAMP=20260101_000002 \
+  GITHUB_WORKSPACE="$ANYKERNEL_PACKAGE_FIXTURE_DIR/work" \
+  GITHUB_ENV="$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/github-env" \
+  GITHUB_OUTPUT="$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/github-output" \
+  MAGISK_APK_PATH="$ANYKERNEL_PACKAGE_FIXTURE_DIR/Magisk.apk" \
+  MAGISK_APK_SHA256="$(sha256sum "$ANYKERNEL_PACKAGE_FIXTURE_DIR/Magisk.apk" | cut -d' ' -f1)" \
+  MAGISKBOOT_ARM64_SHA256="$(sha256sum "$ANYKERNEL_PACKAGE_FIXTURE_DIR/magisk-apk/lib/arm64-v8a/libmagiskboot.so" | cut -d' ' -f1)" \
+  MAGISK_BUSYBOX_ARM64_SHA256="$(sha256sum "$ANYKERNEL_PACKAGE_FIXTURE_DIR/magisk-apk/lib/arm64-v8a/libbusybox.so" | cut -d' ' -f1)" \
+  ANYKERNEL_REPO="$ANYKERNEL_PACKAGE_FIXTURE_DIR/source" \
+  ANYKERNEL_COMMIT="$ANYKERNEL_PACKAGE_COMMIT" \
+  bash "$ANYKERNEL_PACKAGE_SCRIPT" >/dev/null
+)
+test -s "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/release-assets/sm8650-oneplus12-crdroid_KernelSU-Next-with-susfs_111111111111_20260101_000002_rom-gki-compat.zip" \
+  || fail "OnePlus 12 package with arm64 tools was not produced"
+assert_eq "magisk-arm64-magiskboot" \
+  "$(cat "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/tools/magiskboot")" \
+  "OnePlus 12 MagiskBoot replacement"
+assert_eq "magisk-arm64-busybox" \
+  "$(cat "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/tools/busybox")" \
+  "OnePlus 12 BusyBox replacement"
+grep -Fq 'Bundled MagiskBoot ABI: arm64' \
+  "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/META-INF/com/google/android/update-binary" \
+  || fail "OnePlus 12 package does not report arm64 MagiskBoot"
+grep -Fq 'Removing incompatible app-injected mkbootfs' \
+  "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/META-INF/com/google/android/update-binary" \
+  || fail "OnePlus 12 package does not remove an injected 32-bit mkbootfs"
 
 for i in "${!profiles[@]}"; do
   resolve_build_profile "${profiles[$i]}"
