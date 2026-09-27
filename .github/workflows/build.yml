@@ -267,6 +267,7 @@ jobs:
             libdw-dev \
             libelf-dev \
             libssl-dev \
+            lld \
             lz4 \
             python3 \
             zip
