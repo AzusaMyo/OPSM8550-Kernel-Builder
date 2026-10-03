@@ -46,6 +46,24 @@ assignments are not expected to be written back to `.config`; keeping them on
 the make command line matches how the ROM builds its kernel and external
 modules.
 
+The OnePlus 12 crDroid profile has an optional **ROM GKI module compatibility**
+mode for a boot-only custom Image. A custom Image generates a new module signing
+key, while the installed ROM keeps its `system_dlkm` GKI modules. On affected
+builds, `rfkill.ko` is rejected with `exports protected symbol rfkill_alloc`,
+which prevents the dependent `qca_cld3_kiwi_v2` Wi-Fi driver from loading.
+Selecting `Use existing ROM system_dlkm modules (experimental)` disables
+`CONFIG_MODULE_SIG_PROTECT` for that build while retaining module signature
+parsing and module version checks. It allows modules whose signature cannot be
+verified with this Image's newly generated key, so only use it with ROM modules
+you trust. This can let the existing ROM modules load, but it reduces GKI
+protected-symbol enforcement and does not guarantee
+compatibility if module CRCs or firmware differ. The default remains strict.
+The chosen mode is recorded in `build-info.json` and in the ZIP filename.
+The OnePlus 12 crDroid flashable ZIP also replaces AnyKernel's 32-bit ARM
+BusyBox and MagiskBoot with pinned arm64 versions from Magisk 30.7. The device
+reports `arm64-v8a` and cannot execute the old 32-bit MagiskBoot; the package
+verifies both binary checksums and ELF architecture before creating the ZIP.
+
 The LunarisOS OnePlus 11 profile follows the kernel source published in the
 LunarisOS OTA metadata. Its maintainer kernel uses `lineage-23.2`, while its
 matching external modules use the `los` branch; the resolver pins both branches

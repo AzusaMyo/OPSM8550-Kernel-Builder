@@ -207,6 +207,16 @@ enable_ksu_common_configs() {
   enable_config_values "$config_file" CONFIG_TMPFS_XATTR
 }
 
+# A boot-only custom Image has a newly generated module signing key and cannot
+# authenticate protected GKI modules retained in the ROM's system_dlkm. This
+# opt-in mode allows those modules through the protected-symbol check. Their
+# signatures still cannot be authenticated with the new Image's key.
+apply_rom_gki_module_compat_config() {
+  local config_file="$1"
+  [[ "${ROM_GKI_MODULE_COMPAT:-0}" == 1 ]] || return 0
+  disable_config_values "$config_file" CONFIG_MODULE_SIG_PROTECT
+}
+
 write_kernel_scmversion() {
   local kernel_commit="$1"
   local destination="${2:-.scmversion}"

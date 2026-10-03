@@ -32,6 +32,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 : "${KERNEL_BRANCH:?}"
 : "${KERNEL_COMMIT:?}"
 : "${BUILD_MODE:?}"
+: "${ROM_GKI_MODULE_COMPAT:=0}"
 
 BUILD_STARTED_AT="$(date +%s)"
 CONFIG_SECONDS=0
@@ -162,13 +163,24 @@ read -r -a ACTIVE_CONFIG_ARRAY <<< "$ACTIVE_BUILD_CONFIGS"
 
 BUILD_PHASE="config generation"
 apply_variant_configs arch/arm64/configs/gki_defconfig
+apply_rom_gki_module_compat_config arch/arm64/configs/gki_defconfig
 make "${MAKE_ARGS[@]}" gki_defconfig "${ACTIVE_CONFIG_ARRAY[@]}"
 apply_variant_configs out/.config
+apply_rom_gki_module_compat_config out/.config
 make "${MAKE_ARGS[@]}" olddefconfig
 
 require_config_enabled  out/.config CONFIG_MODULES
 require_config_enabled  out/.config CONFIG_MODULE_UNLOAD
 require_config_enabled  out/.config CONFIG_MODVERSIONS
+if [[ "$ROM_GKI_MODULE_COMPAT" == 1 ]]; then
+  require_config_enabled out/.config CONFIG_MODULE_SIG
+  require_config_disabled out/.config CONFIG_MODULE_SIG_FORCE
+  require_config_disabled out/.config CONFIG_MODULE_SIG_PROTECT
+  grep -Fqx '# CONFIG_MODULE_SIG_PROTECT is not set' out/.config || {
+    echo "::error::ROM GKI module compatibility did not survive olddefconfig."
+    exit 1
+  }
+fi
 
 if [[ "$KSU_TYPE" != "None" ]]; then
   require_config_enabled out/.config CONFIG_KSU

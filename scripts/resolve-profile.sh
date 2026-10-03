@@ -20,9 +20,25 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 : "${GITHUB_STEP_SUMMARY:?}"
 
 INPUT_KERNEL_BRANCH="${INPUT_KERNEL_BRANCH:-}"
+INPUT_ROM_GKI_MODULE_COMPAT="${INPUT_ROM_GKI_MODULE_COMPAT:-Strict GKI module checks (default)}"
 
 resolve_build_profile "$INPUT_BUILD_PROFILE"
 resolve_root_solution "$INPUT_ROOT_SOLUTION"
+
+case "$INPUT_ROM_GKI_MODULE_COMPAT" in
+  "Strict GKI module checks (default)") ROM_GKI_MODULE_COMPAT=0 ;;
+  "Use existing ROM system_dlkm modules (experimental)")
+    if [[ "$PROFILE_ID" != sm8650-oneplus12-crdroid ]]; then
+      echo "::error::ROM GKI module compatibility mode is currently validated only for the OnePlus 12 crDroid profile."
+      exit 1
+    fi
+    ROM_GKI_MODULE_COMPAT=1
+    ;;
+  *)
+    echo "::error::Unknown ROM GKI module compatibility mode: $INPUT_ROM_GKI_MODULE_COMPAT"
+    exit 1
+    ;;
+esac
 
 case "$INPUT_BUILD_MODE" in
   "Full build (artifact only)"|"Full build and publish release"|"Patch/config validation only") ;;
@@ -229,6 +245,7 @@ esac
   echo "PLATFORM_NAME=$PLATFORM_NAME"
   echo "BUILD_CONFIGS=$BUILD_CONFIGS"
   echo "KERNEL_MAKE_FLAGS=$KERNEL_MAKE_FLAGS"
+  echo "ROM_GKI_MODULE_COMPAT=$ROM_GKI_MODULE_COMPAT"
   echo "SOURCE_LAYOUT=$SOURCE_LAYOUT"
   echo "KERNEL_SOURCE=$KERNEL_SOURCE"
   echo "SOURCE_NAME=$SOURCE_NAME"
@@ -284,6 +301,7 @@ esac
   echo "modules_commit=$MODULES_COMMIT"
   echo "clang_version=$CLANG_VERSION"
   echo "ksu_type=$KSU_TYPE"
+  echo "rom_gki_module_compat=$ROM_GKI_MODULE_COMPAT"
   echo "ksu_commit=$KSU_COMMIT"
   echo "susfs_ref=$SUSFS_REF"
   echo "susfs_commit=$SUSFS_COMMIT"
@@ -310,6 +328,7 @@ esac
     echo "- Device make flags: $KERNEL_MAKE_FLAGS"
   fi
   echo "- Root solution: $KSU_TYPE"
+  echo "- ROM GKI module compatibility: $ROM_GKI_MODULE_COMPAT"
   echo "- Mode: $INPUT_BUILD_MODE"
   if [[ -n "$SUPPORTED_ANDROID_VERSIONS" ]]; then
     echo "- Android package check: $SUPPORTED_ANDROID_VERSIONS"
