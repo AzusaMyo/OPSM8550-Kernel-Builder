@@ -151,6 +151,9 @@ integrate the exact resolved `master` commit, enable `CONFIG_NOMOUNT=y`, and
 checks both source wiring and final kernel signatures. NoMount hooks VFS
 operations and is marked experimental by its upstream project, so it remains
 an explicit opt-in instead of changing existing build presets.
+SukiSU Ultra SUSFS presets also enable and verify
+`CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS`, which filters KernelSU and SUSFS
+names from `/proc/kallsyms`.
 
 ## Quick start
 

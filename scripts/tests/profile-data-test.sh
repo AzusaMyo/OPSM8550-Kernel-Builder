@@ -612,12 +612,14 @@ grep -q '^CONFIG_KALLSYMS_ALL=y$' "$KPM_CONFIG_FIXTURE" || fail "KPM kallsyms-al
 grep -q '^CONFIG_KSU_SUSFS=y$' "$KPM_CONFIG_FIXTURE" || fail "combined preset SUSFS config"
 grep -q '^CONFIG_KSU_SUSFS_SUS_MAP=y$' "$KPM_CONFIG_FIXTURE" || fail "combined preset SUSFS map config"
 grep -q '^CONFIG_KSU_SUSFS_OPEN_REDIRECT=y$' "$KPM_CONFIG_FIXTURE" || fail "combined preset SUSFS redirect config"
+grep -q '^CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y$' "$KPM_CONFIG_FIXTURE" || fail "combined preset SUSFS symbol hiding config"
 grep -q '^CONFIG_KEYS=y$' "$KPM_CONFIG_FIXTURE" || fail "combined preset NoMount key config"
 grep -q '^CONFIG_NOMOUNT=y$' "$KPM_CONFIG_FIXTURE" || fail "combined preset NoMount config"
 
 KSU_TYPE="KernelSU-Next-with-susfs-nomount"
 apply_variant_configs "$KSUN_NOMOUNT_CONFIG_FIXTURE"
 grep -q '^CONFIG_KSU_SUSFS=y$' "$KSUN_NOMOUNT_CONFIG_FIXTURE" || fail "KernelSU-Next NoMount SUSFS config"
+grep -q '^# CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS is not set$' "$KSUN_NOMOUNT_CONFIG_FIXTURE" || fail "KernelSU-Next symbol hiding must stay disabled"
 grep -q '^CONFIG_KEYS=y$' "$KSUN_NOMOUNT_CONFIG_FIXTURE" || fail "KernelSU-Next NoMount key config"
 grep -q '^CONFIG_NOMOUNT=y$' "$KSUN_NOMOUNT_CONFIG_FIXTURE" || fail "KernelSU-Next NoMount config"
 if grep -q '^CONFIG_ZEROMOUNT=y$' "$KSUN_NOMOUNT_CONFIG_FIXTURE"; then
@@ -628,6 +630,7 @@ KSU_TYPE="SukiSU-Ultra-with-susfs-zeromount-KPM"
 apply_variant_configs "$ZEROMOUNT_CONFIG_FIXTURE"
 grep -q '^CONFIG_ZEROMOUNT=y$' "$ZEROMOUNT_CONFIG_FIXTURE" || fail "combined preset ZeroMount config"
 grep -q '^CONFIG_KSU_SUSFS=y$' "$ZEROMOUNT_CONFIG_FIXTURE" || fail "ZeroMount preset SUSFS config"
+grep -q '^CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y$' "$ZEROMOUNT_CONFIG_FIXTURE" || fail "ZeroMount preset SUSFS symbol hiding config"
 grep -q '^CONFIG_KPM=y$' "$ZEROMOUNT_CONFIG_FIXTURE" || fail "ZeroMount preset KPM config"
 if grep -q '^CONFIG_NOMOUNT=y$' "$ZEROMOUNT_CONFIG_FIXTURE"; then
   fail "ZeroMount preset must not enable NoMount"

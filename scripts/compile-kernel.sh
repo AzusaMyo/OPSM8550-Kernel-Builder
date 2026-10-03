@@ -178,7 +178,11 @@ if [[ "$KSU_TYPE" == *susfs* ]]; then
   require_config_enabled  out/.config CONFIG_KSU_SUSFS_SUS_MAP
   require_config_enabled  out/.config CONFIG_KSU_SUSFS_OPEN_REDIRECT
   require_config_disabled out/.config CONFIG_KSU_MANUAL_HOOK
-  require_config_disabled out/.config CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS
+  if [[ "$KSU_TYPE" == SukiSU-Ultra-with-susfs* ]]; then
+    require_config_enabled out/.config CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS
+  else
+    require_config_disabled out/.config CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS
+  fi
 fi
 if [[ "$KSU_TYPE" == *nomount* ]]; then
   require_config_enabled out/.config CONFIG_KEYS
