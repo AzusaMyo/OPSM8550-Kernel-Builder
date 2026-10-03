@@ -766,6 +766,7 @@ printf '%s\n' \
   > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source/anykernel.sh"
 printf '%s\n' \
   '[ "$AKHOME" ] || export AKHOME=$POSTINSTALL/tmp/anykernel;' \
+  'ui_print " " "AnyKernel3 by osm0sis @ xda-developers" " ";' \
   '  if [ ! "$match" ]; then' \
   '    abort " " "Unsupported device. Aborting...";' \
   '  fi;' \
@@ -857,6 +858,9 @@ for package_timestamp in 20260101_000000 20260101_000001; do
     || fail "AnyKernel packaging did not produce the flashable archive"
   test -s "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/release-assets/SHA256SUMS" \
     || fail "AnyKernel packaging did not produce checksums"
+  grep -Fxq 'ui_print " " "Kernel developer: AzusaMyo @ xda-developers" " ";' \
+    "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/META-INF/com/google/android/update-binary" \
+    || fail "AnyKernel package does not show the requested kernel developer"
   grep -Fxq 'split_boot;' \
     "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/anykernel.sh" \
     || fail "AnyKernel package does not split ramdiskless boot images"

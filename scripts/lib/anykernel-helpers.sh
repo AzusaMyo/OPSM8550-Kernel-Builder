@@ -161,6 +161,27 @@ configure_anykernel_properties() {
   done
 }
 
+set_anykernel_flasher_developer() {
+  local file="$1"
+  local tmp_file
+  local upstream_line='ui_print " " "AnyKernel3 by osm0sis @ xda-developers" " ";'
+  local developer_line='ui_print " " "Kernel developer: AzusaMyo @ xda-developers" " ";'
+
+  grep -Fxq "$developer_line" "$file" && return 0
+  grep -Fxq "$upstream_line" "$file" || {
+    echo "::error::AnyKernel3 flasher developer line was not found in $file"
+    return 1
+  }
+
+  tmp_file="$(mktemp)"
+  awk -v upstream_line="$upstream_line" -v developer_line="$developer_line" '
+    $0 == upstream_line { print developer_line; next }
+    { print }
+  ' "$file" > "$tmp_file"
+  replace_file_preserving_mode "$tmp_file" "$file"
+  grep -Fxq "$developer_line" "$file"
+}
+
 add_anykernel_devicecheck_diagnostics() {
   local file="$1"
   local tmp_file

@@ -112,6 +112,7 @@ configure_anykernel_properties \
   "OnePlus Kernel (${KSU_TYPE}) for ${TARGET_NAME}" \
   "$DEVICE_NAMES" \
   "$SUPPORTED_ANDROID_VERSIONS"
+set_anykernel_flasher_developer "$ANYKERNEL_UPDATE_BINARY"
 add_anykernel_devicecheck_diagnostics "$ANYKERNEL_UPDATE_BINARY"
 patch_anykernel_app_flash_staging "$ANYKERNEL_UPDATE_BINARY"
 
