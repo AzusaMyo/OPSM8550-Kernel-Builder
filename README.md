@@ -170,6 +170,8 @@ ReSukiSU SUSFS presets pin `fa8311f632a215b5381ec644627c6198d1e8a13e`,
 which passed a full batch build on September 27. Its latest `main` suspends
 SUSFS builds pending upstream SELinux hook updates; this pin must be revisited
 when those updates land. ReSukiSU without SUSFS continues to follow `main`.
+Patch/config validation uses the runner's distribution Clang, LLD, and LLVM
+binutils; full builds use the selected pinned AOSP toolchain.
 
 The three ZeroMount presets fetch the version-matched VFS patch from a pinned
 Super-Builders commit, verify a per-GKI SHA-256, and apply it only after SUSFS.

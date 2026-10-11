@@ -68,6 +68,13 @@ publish_performance_summary() {
 trap publish_performance_summary EXIT
 
 CLANG_ROOT="${GITHUB_WORKSPACE}/toolchains/${CLANG_VERSION}/bin"
+if [[ "$BUILD_MODE" == 'Patch/config validation only' && ! -x "${CLANG_ROOT}/clang" ]]; then
+  # Validation workflows install the distribution LLVM toolchain instead of
+  # downloading AOSP Clang. Keep symbol verification on that same toolchain.
+  CLANG_ROOT="$(dirname "$(command -v clang)")"
+  test -x "${CLANG_ROOT}/ld.lld"
+  test -x "${CLANG_ROOT}/llvm-nm"
+fi
 export PATH="${CLANG_ROOT}:${PATH}"
 export ARCH=arm64
 export SUBARCH=arm64

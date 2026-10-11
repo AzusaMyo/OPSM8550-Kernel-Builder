@@ -81,10 +81,12 @@ grep -Fq 'gh release create "$RELEASE_TAG"' "$WORKFLOW_FILE" \
   || fail "release workflow must publish the pre-reserved tag"
 grep -Fq 'gh api "repos/${GH_REPO}/git/refs/tags/${RELEASE_TAG}" --method DELETE' "$WORKFLOW_FILE" \
   || fail "release workflow must clean up a reserved tag after a failed build"
-grep -Eq '^[[:space:]]+lld \\' "$UPSTREAM_HEALTH_WORKFLOW" \
-  || fail "upstream health workflow is missing the LLVM linker"
-grep -Eq '^[[:space:]]+llvm \\' "$UPSTREAM_HEALTH_WORKFLOW" \
-  || fail "upstream health workflow is missing the LLVM binutils"
+for validation_workflow in "$WORKFLOW_FILE" "$UPSTREAM_HEALTH_WORKFLOW"; do
+  grep -Eq '^[[:space:]]+lld \\' "$validation_workflow" \
+    || fail "$validation_workflow is missing the LLVM linker"
+  grep -Eq '^[[:space:]]+llvm \\' "$validation_workflow" \
+    || fail "$validation_workflow is missing the LLVM binutils"
+done
 grep -Fq 'MODULES_CLONE_DIR="${UPSTREAM_SOC}-modules"' "$RESOLVER_SCRIPT" \
   || fail "community module checkout must preserve the upstream repository stem"
 grep -Fq 'clone_repo "$MODULES_REPO" "$MODULES_BRANCH"' "${SCRIPT_DIR}/../clone-sources.sh" \
