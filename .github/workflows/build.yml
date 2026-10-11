@@ -207,7 +207,7 @@ jobs:
             echo "ARTIFACT_NAME=${ARTIFACT_NAME}"
             echo "DIAGNOSTICS_NAME=${DIAGNOSTICS_NAME}"
             echo "CCACHE_KEY_PREFIX=${CCACHE_KEY_PREFIX}"
-            echo "CCACHE_KEY=${CCACHE_KEY_PREFIX}-${CCACHE_EPOCH}"
+            echo "CCACHE_KEY=${CCACHE_KEY_PREFIX}-${CCACHE_EPOCH}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           } >> "$GITHUB_ENV"
           {
             echo "artifact_name=${ARTIFACT_NAME}"
@@ -275,15 +275,28 @@ jobs:
             python3 \
             zip
 
+      - name: Reclaim hosted runner disk for kernel linking
+        if: inputs.build_mode != 'Patch/config validation only' && runner.environment == 'github-hosted'
+        run: |
+          set -euo pipefail
+          # These preinstalled SDKs are unused by this native kernel build.
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
+          df -h "${RUNNER_TEMP}"
+
       - name: Set up build swap
         if: inputs.build_mode != 'Patch/config validation only'
         run: |
           set -euo pipefail
           SWAPFILE="${RUNNER_TEMP:-/tmp}/kernel-build-swapfile"
-          TOTAL_GB="$(awk '/MemTotal/ {printf "%d", $2 / 1024 / 1024}' /proc/meminfo)"
-          SWAP_GB=8
-          if (( TOTAL_GB < 12 )); then
-            SWAP_GB=16
+          AVAILABLE_GB="$(df -BG --output=avail "${RUNNER_TEMP:-/tmp}" | tail -n 1 | tr -dc '0-9')"
+          SWAP_GB=32
+          # Keep disk space for object files and the final kernel package.
+          if (( AVAILABLE_GB < SWAP_GB + 12 )); then
+            SWAP_GB=$((AVAILABLE_GB - 12))
+          fi
+          if (( SWAP_GB < 8 )); then
+            echo '::error::Insufficient disk space for kernel build swap.'
+            exit 1
           fi
           if ! swapon --show=NAME --noheadings | grep -Fxq "$SWAPFILE"; then
             sudo rm -f "$SWAPFILE"
@@ -292,7 +305,7 @@ jobs:
             sudo mkswap "$SWAPFILE"
             sudo swapon "$SWAPFILE"
           fi
-          sudo sysctl vm.swappiness=10
+          sudo sysctl vm.swappiness=60
           free -h
           swapon --show
 
@@ -337,6 +350,7 @@ jobs:
           include-hidden-files: true
           path: |
             ${{ github.workspace }}/${{ steps.resolve.outputs.soc }}/build.log
+            ${{ github.workspace }}/${{ steps.resolve.outputs.soc }}/build-resources.log
             ${{ github.workspace }}/${{ steps.resolve.outputs.soc }}/integration-smoke.log
             ${{ github.workspace }}/${{ steps.resolve.outputs.soc }}/susfs-source-proof.txt
             ${{ github.workspace }}/${{ steps.resolve.outputs.soc }}/susfs-hook-proof.txt

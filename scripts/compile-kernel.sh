@@ -45,6 +45,10 @@ publish_performance_summary() {
   local elapsed
 
   trap - EXIT
+  if [[ -n "${BUILD_RESOURCE_MONITOR_PID:-}" ]]; then
+    kill "$BUILD_RESOURCE_MONITOR_PID" 2>/dev/null || true
+    wait "$BUILD_RESOURCE_MONITOR_PID" 2>/dev/null || true
+  fi
   finished_at="$(date +%s)"
   elapsed=$((finished_at - BUILD_STARTED_AT))
 
@@ -307,6 +311,18 @@ fi
 
 BUILD_PHASE="kernel compilation"
 COMPILE_STARTED_AT="$(date +%s)"
+(
+  while true; do
+    {
+      echo "==== BUILD RESOURCES $(date -u +'%Y-%m-%d %H:%M:%S UTC') ===="
+      free -h
+      df -h .
+      ps -C ld.lld -o pid,rss,vsz,pcpu,etime,comm || true
+    } | tee -a build-resources.log
+    sleep 30
+  done
+) &
+BUILD_RESOURCE_MONITOR_PID=$!
 if ! make -j"$(nproc)" "${MAKE_ARGS[@]}" Image 2>&1 | tee build.log; then
   COMPILE_SECONDS=$(($(date +%s) - COMPILE_STARTED_AT))
   ccache --show-stats || true
@@ -316,6 +332,9 @@ if ! make -j"$(nproc)" "${MAKE_ARGS[@]}" Image 2>&1 | tee build.log; then
   tail -n 200 build.log || true
   exit 1
 fi
+kill "$BUILD_RESOURCE_MONITOR_PID" 2>/dev/null || true
+wait "$BUILD_RESOURCE_MONITOR_PID" 2>/dev/null || true
+BUILD_RESOURCE_MONITOR_PID=''
 COMPILE_SECONDS=$(($(date +%s) - COMPILE_STARTED_AT))
 
 BUILD_PHASE="post-build verification"

@@ -233,10 +233,14 @@ The workflow also:
 - caches the exact pinned AOSP Clang archive
 - restores a profile/branch/compiler-specific 3 GB compressed ccache
 - reports config, compile, total time, and ccache statistics in the job summary
-- uses an adaptive 8/16 GB swap file with low swappiness for full builds
+- reclaims unused hosted runner SDKs and creates up to 32 GB of swap for Full LTO
+- records memory, disk, and linker resource usage during full builds
 
 GitHub cache entries are an optimization only. A build remains able to download
 or regenerate every cached input.
+Each run saves a fresh ccache snapshot while restoring earlier matching runs,
+so an empty cache from an early failure cannot prevent later builds from saving
+their compiled objects.
 
 ## Safe packaging and provenance
 
