@@ -93,7 +93,7 @@ grep -Fq 'clone_repo "$MODULES_REPO" "$MODULES_BRANCH"' "${SCRIPT_DIR}/../clone-
   || fail "modules checkout must use its independently resolved branch"
 grep -Fq 'MAKE_ARGS+=("${KERNEL_MAKE_FLAG_ARRAY[@]}")' "$COMPILE_SCRIPT" \
   || fail "compile script must pass profile-specific flags to every make invocation"
-grep -Fq 'make "${MAKE_ARGS[@]}" "$EXTRACT_CERT_OBJECT"' "$COMPILE_SCRIPT" \
+grep -Fq 'make "${MAKE_ARGS[@]}" "$EXTRACT_CERT_TARGET"' "$COMPILE_SCRIPT" \
   || fail "validation mode must smoke-compile the kernel certificate host tool"
 grep -Fq 'local max_attempts=5' "$GIT_HELPERS_SCRIPT" \
   || fail "git network helpers must tolerate a longer transient outage"
@@ -296,7 +296,7 @@ grep -Fq 'kernel/policy/allowlist.c.rej' "$SUSFS_APPLY_SCRIPT" \
   || fail "SukiSU drift resolver does not guard the allowlist reject"
 grep -Fq 'SukiSU KPM symbol resolver is not linked into kernelsu.o.' "${SCRIPT_DIR}/../lib/verify.sh" \
   || fail "KPM source verification does not check symbol resolver linkage"
-grep -Fq '"${KSU_DRIVER_DIR}/kernelsu/kernelsu.o"' "$COMPILE_SCRIPT" \
+grep -Fq '"${KSU_DRIVER_DIR}/kernelsu/"' "$COMPILE_SCRIPT" \
   || fail "KPM smoke compilation does not build the composite KernelSU object"
 grep -Fq 'out/${KSU_DRIVER_DIR}/kernelsu/infra/symbol_resolver.o' "${SCRIPT_DIR}/../lib/verify.sh" \
   || fail "KPM binary verification does not inspect the compiled symbol resolver object"

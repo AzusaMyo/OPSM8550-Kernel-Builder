@@ -225,10 +225,12 @@ CONFIG_SECONDS=$(($(date +%s) - CONFIG_STARTED_AT))
 if [[ "$BUILD_MODE" == "Patch/config validation only" ]]; then
   BUILD_PHASE="host-tool smoke compile"
   COMPILE_STARTED_AT="$(date +%s)"
-  # Kbuild exposes individual object targets, not arbitrary host executable
-  # paths. The source lives under scripts/ on some 5.15 vendor kernels.
-  EXTRACT_CERT_OBJECT="${EXTRACT_CERT_SOURCE%.c}.o"
-  if ! make "${MAKE_ARGS[@]}" "$EXTRACT_CERT_OBJECT"; then
+  # Use the owning Kbuild target so extract-cert is compiled with HOSTCC and
+  # linked with libcrypto, rather than treated as an arm64 kernel object.
+  EXTRACT_CERT_TARGET='certs/'
+  [[ "$EXTRACT_CERT_SOURCE" != scripts/* ]] || EXTRACT_CERT_TARGET=scripts
+  if ! make "${MAKE_ARGS[@]}" "$EXTRACT_CERT_TARGET" || \
+     [[ ! -x "out/${EXTRACT_CERT_SOURCE%.c}" ]]; then
     COMPILE_SECONDS=$(($(date +%s) - COMPILE_STARTED_AT))
     echo "::error::Kernel certificate host-tool smoke compile failed."
     exit 1
@@ -242,7 +244,7 @@ if [[ "$BUILD_MODE" == "Patch/config validation only" ]]; then
       fs/namespace.o
       fs/proc/task_mmu.o
       kernel/reboot.o
-      "${KSU_DRIVER_DIR}/kernelsu/kernelsu.o"
+      "${KSU_DRIVER_DIR}/kernelsu/"
     )
   fi
   if [[ "$KSU_TYPE" == *nomount* ]]; then
@@ -262,13 +264,10 @@ if [[ "$BUILD_MODE" == "Patch/config validation only" ]]; then
   fi
   if [[ "$KSU_TYPE" == *KPM* ]]; then
     if [[ "$KSU_TYPE" != *susfs* ]]; then
-      SMOKE_TARGETS+=("${KSU_DRIVER_DIR}/kernelsu/kernelsu.o")
+      SMOKE_TARGETS+=("${KSU_DRIVER_DIR}/kernelsu/")
     fi
-    SMOKE_TARGETS+=(
-      "${KSU_DRIVER_DIR}/kernelsu/kpm/compact.o"
-      "${KSU_DRIVER_DIR}/kernelsu/kpm/kpm.o"
-      "${KSU_DRIVER_DIR}/kernelsu/kpm/super_access.o"
-    )
+    # Building the KernelSU directory includes all CONFIG_KPM objects as well
+    # as its SUSFS compatibility sources and symbol resolver.
   fi
 
   if [[ "${#SMOKE_TARGETS[@]}" -gt 0 ]]; then
