@@ -4,6 +4,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=../lib/profile-data.sh
 . "${SCRIPT_DIR}/../lib/profile-data.sh"
+# shellcheck source=../lib/git-helpers.sh
+. "${SCRIPT_DIR}/../lib/git-helpers.sh"
 # shellcheck source=../lib/anykernel-helpers.sh
 . "${SCRIPT_DIR}/../lib/anykernel-helpers.sh"
 # shellcheck source=../lib/nomount-setup.sh
@@ -459,6 +461,35 @@ for crdroid_profile in \
       fail "$crdroid_profile $resolver_case emitted an unexpected warning"
     fi
   done
+done
+
+# SUSFS variants retain the tested SukiSU ABI while KPM-only follows main.
+for suki_preset in \
+  'SukiSU Ultra + KPM (experimental)' \
+  'SukiSU Ultra + SUSFS + KPM (experimental)' \
+  'SukiSU Ultra + SUSFS + NoMount + KPM (experimental)' \
+  'SukiSU Ultra + SUSFS + ZeroMount + KPM (experimental)'; do
+  : > "$RESOLVER_FIXTURE_DIR/env"
+  PATH="$RESOLVER_FIXTURE_DIR/bin:$PATH" \
+  RESOLVER_REAL_GIT="$RESOLVER_REAL_GIT" \
+  INPUT_BUILD_PROFILE='SM8550 | OnePlus 11 / 12R | crDroid' \
+  INPUT_BRANCH_MODE='Use the recommended branch automatically' \
+  INPUT_CLANG_CHOICE='Recommended (auto-select based on branch)' \
+  INPUT_ROOT_SOLUTION="$suki_preset" \
+  INPUT_BUILD_MODE='Patch/config validation only' \
+  GITHUB_ENV="$RESOLVER_FIXTURE_DIR/env" \
+  GITHUB_OUTPUT="$RESOLVER_FIXTURE_DIR/output" \
+  GITHUB_STEP_SUMMARY="$RESOLVER_FIXTURE_DIR/summary" \
+    bash "$RESOLVER_SCRIPT" > "$RESOLVER_FIXTURE_DIR/log"
+  if [[ "$suki_preset" == *SUSFS* ]]; then
+    grep -Fxq 'KSU_COMMIT=7fbbb1f12e2410b69c8ebf958be84f165b8d0c93' "$RESOLVER_FIXTURE_DIR/env" \
+      || fail "$suki_preset lost its compatible SukiSU pin"
+  else
+    grep -Fxq 'KSU_REF=main' "$RESOLVER_FIXTURE_DIR/env" \
+      || fail "KPM-only builds must track main"
+    grep -Fxq 'KSU_COMMIT=1111111111111111111111111111111111111111' "$RESOLVER_FIXTURE_DIR/env" \
+      || fail "KPM-only builds must resolve the current upstream commit"
+  fi
 done
 
 mkdir -p "$ZEROMOUNT_FIXTURE_DIR/fs"
@@ -1120,5 +1151,75 @@ insert_line_before_last_match \
   'source "fs/nomount/Kconfig"'
 assert_eq "4" "$(grep -nF 'source "fs/nomount/Kconfig"' "$NOMOUNT_FIXTURE_DIR/Kconfig" | cut -d: -f1)" \
   "NoMount Kconfig insertion"
+
+# Exercise NoMount's literal and composed versions through the real installer,
+# including shallow history and both kernel source layouts.
+NOMOUNT_SOURCE_FIXTURE="$NOMOUNT_FIXTURE_DIR/source"
+mkdir -p "$NOMOUNT_SOURCE_FIXTURE/kernel/src"
+printf '%s\n' '#define NOMOUNT_VERSION "20"' > "$NOMOUNT_SOURCE_FIXTURE/kernel/src/nomount.h"
+assert_eq "20" "$(detect_nomount_version "$NOMOUNT_SOURCE_FIXTURE/kernel/src")" \
+  "legacy NoMount literal version"
+printf '%s\n' 'obj-$(CONFIG_NOMOUNT) += nomount.o' > "$NOMOUNT_SOURCE_FIXTURE/kernel/src/Makefile"
+printf '%s\n' 'config NOMOUNT' > "$NOMOUNT_SOURCE_FIXTURE/kernel/src/Kconfig"
+printf '%s\n' 'void nomount_init(void) {}' > "$NOMOUNT_SOURCE_FIXTURE/kernel/src/nomount.c"
+git -C "$NOMOUNT_SOURCE_FIXTURE" init -q
+git -C "$NOMOUNT_SOURCE_FIXTURE" config user.name fixture
+git -C "$NOMOUNT_SOURCE_FIXTURE" config user.email fixture@example.invalid
+git -C "$NOMOUNT_SOURCE_FIXTURE" add .
+git -C "$NOMOUNT_SOURCE_FIXTURE" commit -qm legacy
+NOMOUNT_LEGACY_COMMIT="$(git -C "$NOMOUNT_SOURCE_FIXTURE" rev-parse HEAD)"
+cat > "$NOMOUNT_SOURCE_FIXTURE/kernel/src/nomount.h" <<'EOF'
+#define NOMOUNT_BASE_VERSION "21"
+#ifdef NOMOUNT_COMMIT_COUNT
+    #define NOMOUNT_VERSION NOMOUNT_BASE_VERSION "-" NOMOUNT_COMMIT_COUNT
+#else
+    #define NOMOUNT_VERSION NOMOUNT_BASE_VERSION
+#endif
+EOF
+cat > "$NOMOUNT_SOURCE_FIXTURE/kernel/src/Makefile" <<'EOF'
+NM_REAL_PATH := $(shell readlink -f $(src))
+NOMOUNT_COMMITS := $(shell git -C $(NM_REAL_PATH) rev-list --count HEAD 2>/dev/null)
+ifneq ($(NOMOUNT_COMMITS),)
+ccflags-y += -DNOMOUNT_COMMIT_COUNT=\"$(NOMOUNT_COMMITS)\"
+endif
+obj-$(CONFIG_NOMOUNT) += nomount.o
+EOF
+git -C "$NOMOUNT_SOURCE_FIXTURE" add .
+git -C "$NOMOUNT_SOURCE_FIXTURE" commit -qm composed
+NOMOUNT_COMPOSED_COMMIT="$(git -C "$NOMOUNT_SOURCE_FIXTURE" rev-parse HEAD)"
+assert_eq "21-2" "$(detect_nomount_version "$NOMOUNT_SOURCE_FIXTURE/kernel/src")" \
+  "NoMount version includes the source history count"
+for nomount_layout in fs common/fs; do
+  for nomount_revision in legacy composed; do
+    nomount_work="$NOMOUNT_FIXTURE_DIR/$nomount_layout-$nomount_revision"
+    mkdir -p "$nomount_work/$nomount_layout"
+    : > "$nomount_work/$nomount_layout/Makefile"
+    printf '%s\n' 'menu "Filesystems"' endmenu > "$nomount_work/$nomount_layout/Kconfig"
+    nomount_commit="$NOMOUNT_COMPOSED_COMMIT"
+    expected_nomount_version=21-1
+    if [[ "$nomount_revision" == legacy ]]; then
+      nomount_commit="$NOMOUNT_LEGACY_COMMIT"
+      expected_nomount_version=20
+    fi
+    (
+      cd "$nomount_work"
+      export GITHUB_ENV="$nomount_work/github-env"
+      install_nomount "$NOMOUNT_SOURCE_FIXTURE" master "$nomount_commit" >/dev/null
+      assert_eq "$expected_nomount_version" "$NOMOUNT_VERSION" \
+        "$nomount_layout $nomount_revision integrated version"
+      verify_nomount_source_integration
+      grep -Fxq "nomount_version=$expected_nomount_version" nomount-source-proof.txt \
+        || fail "NoMount proof does not report the compiled version"
+      if (NOMOUNT_VERSION=unexpected; verify_nomount_source_integration) >/dev/null 2>&1; then
+        fail "NoMount verification accepted a mismatched version"
+      fi
+    )
+  done
+done
+printf '%s\n' '#define NOMOUNT_VERSION UNKNOWN_VERSION_EXPRESSION' \
+  > "$NOMOUNT_SOURCE_FIXTURE/kernel/src/nomount.h"
+if detect_nomount_version "$NOMOUNT_SOURCE_FIXTURE/kernel/src" >/dev/null 2>&1; then
+  fail "unknown NoMount version expressions must fail closed"
+fi
 
 echo "PASS: profiles, source compatibility, KPM, SUSFS floor, NoMount/ZeroMount integration, and AnyKernel protection"

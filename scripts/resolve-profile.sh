@@ -117,6 +117,12 @@ case "$KSU_TYPE" in
   SukiSU-Ultra-with-KPM|SukiSU-Ultra-with-susfs-KPM|SukiSU-Ultra-with-susfs-nomount-KPM|SukiSU-Ultra-with-susfs-zeromount-KPM)
     KSU_REPO="https://github.com/SukiSU-Ultra/SukiSU-Ultra.git"
     KSU_REF="main"
+    if [[ "$KSU_TYPE" == *susfs* ]]; then
+      # The October main tree changed the hook ABI beyond our guarded SUSFS
+      # patches. Pin the revision that passed the full SUSFS/NoMount/KPM build.
+      KSU_REF="7fbbb1f12e2410b69c8ebf958be84f165b8d0c93"
+      KSU_COMMIT="$KSU_REF"
+    fi
     ;;
   ReSukiSU*)
     KSU_REPO="https://github.com/ReSukiSU/ReSukiSU.git"
@@ -124,7 +130,7 @@ case "$KSU_TYPE" in
     ;;
 esac
 
-if [[ -n "$KSU_REPO" ]]; then
+if [[ -n "$KSU_REPO" && -z "$KSU_COMMIT" ]]; then
   KSU_COMMIT="$(git_ls_remote_retry --exit-code "$KSU_REPO" "refs/heads/${KSU_REF}" \
     | awk 'NR == 1 {print $1}')"
   if [[ ! "$KSU_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then

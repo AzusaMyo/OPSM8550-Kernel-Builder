@@ -263,6 +263,7 @@ verify_susfs_binary_presence() {
 
 verify_nomount_source_integration() {
   local fs_dir="${NOMOUNT_FS_DIR:?}"
+  local detected_version
 
   test -f "$fs_dir/nomount/nomount.c" || {
     echo "::error::NoMount source is missing at $fs_dir/nomount/nomount.c."
@@ -280,7 +281,8 @@ verify_nomount_source_integration() {
     echo "::error::$fs_dir/Kconfig does not include the NoMount Kconfig."
     exit 1
   }
-  grep -Fq "#define NOMOUNT_VERSION \"${NOMOUNT_VERSION}\"" "$fs_dir/nomount/nomount.h" || {
+  detected_version="$(detect_nomount_version "$fs_dir/nomount")" && \
+    [[ "$detected_version" == "$NOMOUNT_VERSION" ]] || {
     echo "::error::Integrated NoMount headers do not report expected version ${NOMOUNT_VERSION}."
     exit 1
   }
