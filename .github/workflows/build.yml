@@ -35,8 +35,9 @@ on:
         description: Only used in manual mode
         required: true
         type: choice
-        default: "16.0"
+        default: "17.0"
         options:
+          - "17.0"
           - "16.0"
           - "15.0"
           - "14.0"
@@ -65,6 +66,7 @@ on:
         options:
           - Recommended (auto-select based on branch)
           - clang-r596125 (Clang 22.0.2 / current AOSP mainline era)
+          - clang-r584948 (Android 17 / crDroid 13 era)
           - clang-r563880c (Android 16 / LineageOS 23.2+ era)
           - clang-r547379 (Android 16 / LineageOS 23.0 era)
           - clang-r536225 (Android 15 / LineageOS 22.2 era)

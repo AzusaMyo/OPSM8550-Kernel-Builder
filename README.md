@@ -34,7 +34,7 @@ The Nord CE4 source projects store their SM7550/crow device support in
 GKI fragments plus the benz-specific `CONFIG_OPLUS_DEVICE_DTBS=y` and
 `CONFIG_BENZ_DTB=y` make flags. The profiles keep the real `sm7550` device
 identity in release metadata while resolving that upstream naming explicitly.
-Use the dedicated crDroid profile on crDroid: it pins crDroid's own `16.0`
+Use the dedicated crDroid profile on crDroid: it resolves crDroid's own
 kernel and modules instead of the unrelated development/Lineage branch, which
 is not ABI-compatible with crDroid's first-stage vendor modules.
 
@@ -97,6 +97,27 @@ the kernel release suffix to the exact source commit (for example,
 `-g0d516eb3375f`) and verifies that release in the final `Image` banner. This
 keeps the kernel vermagic aligned with the ROM's vendor modules while the
 selected root preset changes only its required feature options.
+
+## crDroid 13 (Android 17)
+
+The existing crDroid profiles cover Nord CE4, OnePlus 11 / 12R / Ace 3, and
+OnePlus 12 on crDroid 13. Automatic branch selection follows the upstream
+default, currently `17.0`, for both the kernel and matching modules. Manual
+selection also offers `17.0`; retain `16.0` for crDroid 12 / Android 16.
+[crDroid 13 is based on Android 17](https://crdroid.net/blog/2026-09-28-crDroid-13-BETA-source-is-now-pushed/),
+so the ROM major version `13` must not be confused with the Android branch
+`13.0`.
+
+Android 17 branches select the pinned AOSP `clang-r584948` toolchain to match
+[crDroid's compiler default](https://github.com/crdroidandroid/android_build_soong/blob/17.0/cc/config/global.go).
+Flashable ZIPs enforce `supported.versions=17`. SUSFS and ZeroMount still use
+the devices' GKI kernel families: Android 14 / 5.15 for Nord CE4 and OnePlus
+11 / 12R / Ace 3, and Android 14 / 6.1 for OnePlus 12. The ROM Android version
+does not change those kernel-base mappings.
+
+The OnePlus 11 / 12R crDroid profile passes the common OPlus DTB flag and both
+the Salami and Aston device flags on every make invocation, matching the
+upstream device configurations for the shared kernel image.
 
 ## Root integrations
 
@@ -278,12 +299,13 @@ Pushes and pull requests run:
 - actionlint for all workflow files
 
 `Check upstream health` runs every Monday and can also be started manually. It
-resolves exact commits for all twelve profiles, then runs a twenty-five-job
+resolves exact commits for all twelve profiles, then runs a twenty-nine-job
 smoke-test matrix: KernelSU-Next + SUSFS + NoMount, SukiSU Ultra + SUSFS +
 NoMount + KPM
 (including the crDroid OnePlus 12 / Android 6.1 vendor include drift),
 and ReSukiSU + SUSFS + NoMount are validated on representative SM7550 (including
-both CE4 source families), SM8450, SM8550, and SM8650 sources, with an additional
+both CE4 source families), SM8450, SM8550 (including crDroid), and SM8650
+sources, with an additional
 baseline validation for the LunarisOS OnePlus 11 and crDroid OnePlus 12 sources.
 The SukiSU Ultra ZeroMount preset is validated across the representative
 5.10, 5.15, and 6.1 source families; the KernelSU-Next and ReSukiSU ZeroMount

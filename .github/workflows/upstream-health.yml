@@ -44,6 +44,7 @@ jobs:
           - SM7550 | OnePlus Nord CE4 | crDroid (recommended for crDroid)
           - SM8450 | OnePlus 10T / Ace Pro | LineageOS community
           - SM8550 | OnePlus 11 / 12R | LineageOS (recommended)
+          - SM8550 | OnePlus 11 / 12R | crDroid
           - SM8650 | OnePlus 12 | LineageOS (recommended)
         include:
           - integration: KernelSU-Next + SUSFS + ZeroMount (experimental)

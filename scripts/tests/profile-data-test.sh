@@ -55,6 +55,13 @@ grep -Fq 'type: choice' <<< "$kernel_branch_input" \
   || fail "manual kernel branch input must be a choice"
 grep -Fq -- '- "16.0"' <<< "$kernel_branch_input" \
   || fail "manual kernel branch choices must include crDroid 16.0"
+grep -Fq -- '- "17.0"' <<< "$kernel_branch_input" \
+  || fail "manual kernel branch choices must include crDroid 13 / Android 17"
+grep -Fq -- '- clang-r584948 (Android 17 / crDroid 13 era)' "$WORKFLOW_FILE" \
+  || fail "workflow must offer the crDroid 13 compiler"
+grep -Fq '/b896c53892be0ae507473a9f3dce67907edf4965/clang-r584948.tar.gz' \
+  "${SCRIPT_DIR}/../download-clang.sh" \
+  || fail "crDroid 13 compiler download must use the pinned AOSP revision"
 grep -Fq '"CC=ccache clang"' "$COMPILE_SCRIPT" \
   || fail "compile script is not passing ccache on the make command line"
 grep -Fq 'KBUILD_BUILD_TIMESTAMP=' "$COMPILE_SCRIPT" \
@@ -151,6 +158,11 @@ resolve_build_profile "SM8650 | OnePlus 12 | LineageOS (recommended)"
 assert_eq "CONFIG_OPLUS_DEVICE_DTBS=y CONFIG_WAFFLE_DTB=y" "$KERNEL_MAKE_FLAGS" "OnePlus 12 LineageOS make flags"
 resolve_build_profile "SM8650 | OnePlus 12 | crDroid"
 assert_eq "CONFIG_OPLUS_DEVICE_DTBS=y CONFIG_WAFFLE_DTB=y" "$KERNEL_MAKE_FLAGS" "OnePlus 12 crDroid make flags"
+resolve_build_profile "SM8550 | OnePlus 11 / 12R | crDroid"
+assert_eq "CONFIG_OPLUS_DEVICE_DTBS=y CONFIG_SALAMI_DTB=y CONFIG_ASTON_DTB=y" \
+  "$KERNEL_MAKE_FLAGS" "OnePlus 11 / 12R crDroid make flags"
+grep -Fq -- '- SM8550 | OnePlus 11 / 12R | crDroid' "$UPSTREAM_HEALTH_WORKFLOW" \
+  || fail "upstream health must exercise the crDroid SM8550 source"
 grep -Fq 'device_kernel_make_flags: ($kernel_make_flags | split(" ") | map(select(length > 0)))' "$ANYKERNEL_PACKAGE_SCRIPT" \
   || fail "build provenance does not record device kernel make flags"
 grep -Fq "out/Module.symvers" "$WORKFLOW_FILE" \
@@ -297,6 +309,20 @@ resolve_clang_version "Recommended (auto-select based on branch)" "lineage-23.2"
 assert_eq "clang-r563880c" "$CLANG_VERSION" "LineageOS 23.2 clang"
 resolve_clang_version "Recommended (auto-select based on branch)" "main"
 assert_eq "clang-r596125" "$CLANG_VERSION" "mainline clang"
+for android17_branch in 17.0 17.1 lineage-24.0 seventeen seventeen-qpr1 android17; do
+  resolve_clang_version "Recommended (auto-select based on branch)" "$android17_branch"
+  assert_eq "clang-r584948" "$CLANG_VERSION" "$android17_branch clang"
+  infer_android_versions "$android17_branch"
+  assert_eq "17" "$SUPPORTED_ANDROID_VERSIONS" "$android17_branch Android version"
+done
+resolve_clang_version "clang-r584948 (Android 17 / crDroid 13 era)" 16.0
+assert_eq "clang-r584948" "$CLANG_VERSION" "manual crDroid 13 compiler override"
+for older_branch in 13.0 14.0 15.0 16.0; do
+  infer_android_versions "$older_branch"
+  assert_eq "${older_branch%%.*}" "$SUPPORTED_ANDROID_VERSIONS" "$older_branch Android version"
+done
+resolve_clang_version "Recommended (auto-select based on branch)" 16.0
+assert_eq "clang-r563880c" "$CLANG_VERSION" "retained crDroid 12 compiler"
 
 resolve_susfs_settings sm8550 lineage-20.0
 assert_eq "gki-android13-5.15" "$SUSFS_REF" "Android 13 susfs"
@@ -304,6 +330,16 @@ resolve_susfs_settings sm8550 lineage-23.2
 assert_eq "gki-android14-5.15" "$SUSFS_REF" "Android 16 susfs"
 resolve_susfs_settings sm7550 lineage-23.0
 assert_eq "gki-android14-5.15" "$SUSFS_REF" "Nord CE4 susfs"
+for crdroid_soc in sm7550 sm8550 sm8650; do
+  resolve_susfs_settings "$crdroid_soc" 17.0
+  if [[ "$crdroid_soc" == sm8650 ]]; then
+    assert_eq "gki-android14-6.1" "$SUSFS_REF" "crDroid 13 OnePlus 12 GKI base"
+  else
+    assert_eq "gki-android14-5.15" "$SUSFS_REF" "crDroid 13 $crdroid_soc GKI base"
+  fi
+  [[ "$(zeromount_patch_sha256 "${SUSFS_REF#gki-}")" =~ ^[0-9a-f]{64}$ ]] \
+    || fail "crDroid 13 $crdroid_soc ZeroMount patch mapping"
+done
 assert_eq "2c774fdb4f0aaa743598c1bec787f6c935574ed1" \
   "$(sukisu_compatible_susfs_commit gki-android13-5.10)" "SukiSU Android 13 5.10 SUSFS pin"
 assert_eq "7af04b08f86a5f811cbea28805f96d52368e005f" \
@@ -342,7 +378,88 @@ ANYKERNEL_CACHE_FIXTURE_DIR="$(mktemp -d)"
 ANYKERNEL_PACKAGE_FIXTURE_DIR="$(mktemp -d)"
 ANYKERNEL_SLOT_FIXTURE_DIR="$(mktemp -d)"
 SUSFS_VENDOR_FIXTURE_DIR="$(mktemp -d)"
-trap 'rm -f "$ANYKERNEL_FIXTURE" "$UPDATE_BINARY_FIXTURE" "$APP_STAGING_FIXTURE" "$KPM_CONFIG_FIXTURE" "$KSUN_NOMOUNT_CONFIG_FIXTURE" "$ZEROMOUNT_CONFIG_FIXTURE" "$MODULE_CONFIG_FIXTURE" "$SCMVERSION_FIXTURE"; rm -rf "$KPM_VERIFY_FIXTURE" "$NOMOUNT_FIXTURE_DIR" "$ZEROMOUNT_FIXTURE_DIR" "$EXTRACT_CERT_FIXTURE_DIR" "$ANYKERNEL_CACHE_FIXTURE_DIR" "$ANYKERNEL_PACKAGE_FIXTURE_DIR" "$ANYKERNEL_SLOT_FIXTURE_DIR" "$SUSFS_VENDOR_FIXTURE_DIR"' EXIT
+RESOLVER_FIXTURE_DIR="$(mktemp -d)"
+trap 'rm -f "$ANYKERNEL_FIXTURE" "$UPDATE_BINARY_FIXTURE" "$APP_STAGING_FIXTURE" "$KPM_CONFIG_FIXTURE" "$KSUN_NOMOUNT_CONFIG_FIXTURE" "$ZEROMOUNT_CONFIG_FIXTURE" "$MODULE_CONFIG_FIXTURE" "$SCMVERSION_FIXTURE"; rm -rf "$KPM_VERIFY_FIXTURE" "$NOMOUNT_FIXTURE_DIR" "$ZEROMOUNT_FIXTURE_DIR" "$EXTRACT_CERT_FIXTURE_DIR" "$ANYKERNEL_CACHE_FIXTURE_DIR" "$ANYKERNEL_PACKAGE_FIXTURE_DIR" "$ANYKERNEL_SLOT_FIXTURE_DIR" "$SUSFS_VENDOR_FIXTURE_DIR" "$RESOLVER_FIXTURE_DIR"' EXIT
+
+# Exercise the real resolver with offline upstream refs, including a default
+# branch migration to 17.0 and an explicit selection of the older 16.0 branch.
+mkdir -p "$RESOLVER_FIXTURE_DIR/bin"
+cat > "$RESOLVER_FIXTURE_DIR/bin/git" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$1" != ls-remote ]]; then
+  exec "${RESOLVER_REAL_GIT:?}" "$@"
+fi
+if [[ "$2" == --symref ]]; then
+  printf 'ref: refs/heads/17.0\tHEAD\n'
+  exit 0
+fi
+commit=1111111111111111111111111111111111111111
+for argument in "$@"; do
+  if [[ "$argument" == *-modules.git ]]; then
+    commit=2222222222222222222222222222222222222222
+  fi
+done
+printf '%s\trefs/heads/%s\n' "$commit" "${@: -1}"
+EOF
+chmod +x "$RESOLVER_FIXTURE_DIR/bin/git"
+RESOLVER_REAL_GIT="$(command -v git)"
+for crdroid_profile in \
+  "SM7550 | OnePlus Nord CE4 | crDroid (recommended for crDroid)" \
+  "SM8550 | OnePlus 11 / 12R | crDroid" \
+  "SM8650 | OnePlus 12 | crDroid"; do
+  resolve_build_profile "$crdroid_profile"
+  for resolver_case in automatic-17 manual-17 manual-16; do
+    resolver_mode="I want to select the branch myself"
+    resolver_branch=17.0
+    expected_android=17
+    expected_clang=clang-r584948
+    if [[ "$resolver_case" == automatic-17 ]]; then
+      resolver_mode="Use the recommended branch automatically"
+      resolver_branch=""
+    elif [[ "$resolver_case" == manual-16 ]]; then
+      resolver_branch=16.0
+      expected_android=16
+      expected_clang=clang-r563880c
+    fi
+    expected_branch="${resolver_branch:-17.0}"
+    : > "$RESOLVER_FIXTURE_DIR/env"
+    : > "$RESOLVER_FIXTURE_DIR/output"
+    : > "$RESOLVER_FIXTURE_DIR/summary"
+    PATH="$RESOLVER_FIXTURE_DIR/bin:$PATH" \
+    RESOLVER_REAL_GIT="$RESOLVER_REAL_GIT" \
+    INPUT_BUILD_PROFILE="$crdroid_profile" \
+    INPUT_BRANCH_MODE="$resolver_mode" \
+    INPUT_KERNEL_BRANCH="$resolver_branch" \
+    INPUT_CLANG_CHOICE="Recommended (auto-select based on branch)" \
+    INPUT_ROOT_SOLUTION="No root changes" \
+    INPUT_BUILD_MODE="Patch/config validation only" \
+    INPUT_ROM_GKI_MODULE_COMPAT="Strict GKI module checks (default)" \
+    GITHUB_ENV="$RESOLVER_FIXTURE_DIR/env" \
+    GITHUB_OUTPUT="$RESOLVER_FIXTURE_DIR/output" \
+    GITHUB_STEP_SUMMARY="$RESOLVER_FIXTURE_DIR/summary" \
+      bash "$RESOLVER_SCRIPT" > "$RESOLVER_FIXTURE_DIR/log" \
+      || fail "$crdroid_profile $resolver_case resolver failed"
+    for expected_field in \
+      "PROFILE_ID=$PROFILE_ID" \
+      "KERNEL_REPO=https://github.com/crdroidandroid/android_kernel_oneplus_${UPSTREAM_SOC}.git" \
+      "MODULES_REPO=https://github.com/crdroidandroid/android_kernel_oneplus_${UPSTREAM_SOC}-modules.git" \
+      "KERNEL_BRANCH=$expected_branch" "MODULES_BRANCH=$expected_branch" \
+      "KERNEL_COMMIT=1111111111111111111111111111111111111111" \
+      "MODULES_COMMIT=2222222222222222222222222222222222222222" \
+      "CLANG_VERSION=$expected_clang" "SUPPORTED_ANDROID_VERSIONS=$expected_android" \
+      "KERNEL_MAKE_FLAGS=$KERNEL_MAKE_FLAGS"; do
+      grep -Fxq "$expected_field" "$RESOLVER_FIXTURE_DIR/env" \
+        || fail "$crdroid_profile $resolver_case missing $expected_field"
+    done
+    grep -Fxq "supported_android_versions=$expected_android" "$RESOLVER_FIXTURE_DIR/output" \
+      || fail "$crdroid_profile $resolver_case output Android version"
+    grep -Fq "Android package check: $expected_android" "$RESOLVER_FIXTURE_DIR/summary" \
+      || fail "$crdroid_profile $resolver_case summary Android version"
+    if grep -Eq '::warning::|disabled' "$RESOLVER_FIXTURE_DIR/log"; then
+      fail "$crdroid_profile $resolver_case emitted an unexpected warning"
+    fi
+  done
+done
 
 mkdir -p "$ZEROMOUNT_FIXTURE_DIR/fs"
 cat > "$ZEROMOUNT_FIXTURE_DIR/fs/stat.c" <<'EOF'
@@ -928,10 +1045,10 @@ done
   TARGET_NAME='OnePlus 12' \
   DEVICE_CODENAMES=waffle \
   DEVICE_NAMES='waffle OP5929L1 OP595DL1' \
-  SUPPORTED_ANDROID_VERSIONS=16 \
+  SUPPORTED_ANDROID_VERSIONS=17 \
   SOURCE_NAME=crDroid \
-  KERNEL_BRANCH=16.0 \
-  MODULES_BRANCH=16.0 \
+  KERNEL_BRANCH=17.0 \
+  MODULES_BRANCH=17.0 \
   KERNEL_COMMIT=1111111111111111111111111111111111111111 \
   MODULES_COMMIT=2222222222222222222222222222222222222222 \
   CLANG_VERSION=test-clang \
@@ -951,6 +1068,8 @@ done
 )
 test -s "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/release-assets/sm8650-oneplus12-crdroid_KernelSU-Next-with-susfs_111111111111_20260101_000002_rom-gki-compat.zip" \
   || fail "OnePlus 12 package with arm64 tools was not produced"
+grep -Fxq 'supported.versions=17' "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/anykernel.sh" \
+  || fail "crDroid 13 OnePlus 12 package does not enforce Android 17"
 assert_eq "magisk-arm64-magiskboot" \
   "$(cat "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/tools/magiskboot")" \
   "OnePlus 12 MagiskBoot replacement"
@@ -966,11 +1085,18 @@ grep -Fq 'Removing incompatible app-injected mkbootfs' \
 
 for i in "${!profiles[@]}"; do
   resolve_build_profile "${profiles[$i]}"
+  package_android=16
+  if [[ "$KERNEL_SOURCE" == crdroidandroid ]]; then
+    infer_android_versions 17.0
+    package_android="$SUPPORTED_ANDROID_VERSIONS"
+  fi
   configure_anykernel_properties \
     "$ANYKERNEL_FIXTURE" \
     "${PROFILE_ID} test kernel" \
     "$DEVICE_NAMES" \
-    "16"
+    "$package_android"
+  grep -Fxq "supported.versions=$package_android" "$ANYKERNEL_FIXTURE" \
+    || fail "${profiles[$i]} did not enforce Android $package_android"
   for device_name in $DEVICE_NAMES; do
     grep -q "^device.name[1-7]=${device_name}$" "$ANYKERNEL_FIXTURE" \
       || fail "${profiles[$i]} did not inject device ID: $device_name"
