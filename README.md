@@ -166,6 +166,11 @@ when expected wiring, config, objects, or symbols are missing. KPM resolver
 verification uses AOSP Clang's LTO-aware `llvm-nm` on the compiled resolver
 object instead of GNU `nm` on the aggregate LTO intermediate.
 
+ReSukiSU SUSFS presets pin `fa8311f632a215b5381ec644627c6198d1e8a13e`,
+which passed a full batch build on September 27. Its latest `main` suspends
+SUSFS builds pending upstream SELinux hook updates; this pin must be revisited
+when those updates land. ReSukiSU without SUSFS continues to follow `main`.
+
 The three ZeroMount presets fetch the version-matched VFS patch from a pinned
 Super-Builders commit, verify a per-GKI SHA-256, and apply it only after SUSFS.
 The pipeline verifies the `getname()` and directory-entry hooks, requires

@@ -127,6 +127,12 @@ case "$KSU_TYPE" in
   ReSukiSU*)
     KSU_REPO="https://github.com/ReSukiSU/ReSukiSU.git"
     KSU_REF="main"
+    if [[ "$KSU_TYPE" == *susfs* ]]; then
+      # Latest main suspends SUSFS builds until its SELinux hooks are updated.
+      # Retain the revision that passed the full three-variant build on Sep 27.
+      KSU_REF="fa8311f632a215b5381ec644627c6198d1e8a13e"
+      KSU_COMMIT="$KSU_REF"
+    fi
     ;;
 esac
 

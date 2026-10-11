@@ -463,12 +463,16 @@ for crdroid_profile in \
   done
 done
 
-# SUSFS variants retain the tested SukiSU ABI while KPM-only follows main.
+# SUSFS variants retain tested root revisions while other presets follow main.
 for suki_preset in \
   'SukiSU Ultra + KPM (experimental)' \
   'SukiSU Ultra + SUSFS + KPM (experimental)' \
   'SukiSU Ultra + SUSFS + NoMount + KPM (experimental)' \
-  'SukiSU Ultra + SUSFS + ZeroMount + KPM (experimental)'; do
+  'SukiSU Ultra + SUSFS + ZeroMount + KPM (experimental)' \
+  'ReSukiSU' \
+  'ReSukiSU + susfs' \
+  'ReSukiSU + SUSFS + NoMount (experimental)' \
+  'ReSukiSU + SUSFS + ZeroMount (experimental)'; do
   : > "$RESOLVER_FIXTURE_DIR/env"
   PATH="$RESOLVER_FIXTURE_DIR/bin:$PATH" \
   RESOLVER_REAL_GIT="$RESOLVER_REAL_GIT" \
@@ -481,14 +485,17 @@ for suki_preset in \
   GITHUB_OUTPUT="$RESOLVER_FIXTURE_DIR/output" \
   GITHUB_STEP_SUMMARY="$RESOLVER_FIXTURE_DIR/summary" \
     bash "$RESOLVER_SCRIPT" > "$RESOLVER_FIXTURE_DIR/log"
-  if [[ "$suki_preset" == *SUSFS* ]]; then
+  if [[ "$suki_preset" == ReSukiSU* && "${suki_preset,,}" == *susfs* ]]; then
+    grep -Fxq 'KSU_COMMIT=fa8311f632a215b5381ec644627c6198d1e8a13e' "$RESOLVER_FIXTURE_DIR/env" \
+      || fail "$suki_preset lost its compatible ReSukiSU pin"
+  elif [[ "$suki_preset" == *SUSFS* ]]; then
     grep -Fxq 'KSU_COMMIT=7fbbb1f12e2410b69c8ebf958be84f165b8d0c93' "$RESOLVER_FIXTURE_DIR/env" \
       || fail "$suki_preset lost its compatible SukiSU pin"
   else
     grep -Fxq 'KSU_REF=main' "$RESOLVER_FIXTURE_DIR/env" \
-      || fail "KPM-only builds must track main"
+      || fail "$suki_preset must track main"
     grep -Fxq 'KSU_COMMIT=1111111111111111111111111111111111111111' "$RESOLVER_FIXTURE_DIR/env" \
-      || fail "KPM-only builds must resolve the current upstream commit"
+      || fail "$suki_preset must resolve the current upstream commit"
   fi
 done
 
@@ -575,6 +582,49 @@ grep -Fq '#include <linux/susfs_def.h>' "$SUSFS_VENDOR_FIXTURE_DIR/fs/super.c" \
   || fail "SM8650 SUSFS recovery did not add the superblock header"
 grep -Fq 'extern bool susfs_is_current_ksu_domain(void);' "$SUSFS_VENDOR_FIXTURE_DIR/fs/super.c" \
   || fail "SM8650 SUSFS recovery did not add the superblock domain declaration"
+
+# Link the generated SELinux compatibility object with all combinations of
+# native symbols. Source inspection alone misses duplicate definitions at LTO.
+for native_symbols in neither fake running both; do
+  selinux_fixture="$SUSFS_VENDOR_FIXTURE_DIR/selinux-$native_symbols"
+  mkdir -p "$selinux_fixture/include/linux" "$selinux_fixture/compat"
+  printf '%s\n' '#define __read_mostly' '#define __maybe_static' > "$selinux_fixture/include/linux/cache.h"
+  echo '#include <stdbool.h>' > "$selinux_fixture/include/linux/types.h"
+  echo 'struct selinux_state { int initialized; };' > "$selinux_fixture/include/security.h"
+  cat > "$selinux_fixture/native.c" <<'EOF'
+#include <linux/cache.h>
+#include <linux/types.h>
+#include "security.h"
+EOF
+  if [[ "$native_symbols" == fake || "$native_symbols" == both ]]; then
+    echo '__maybe_static struct selinux_state fake_state;' >> "$selinux_fixture/native.c"
+  fi
+  if [[ "$native_symbols" == running || "$native_symbols" == both ]]; then
+    echo 'bool ksu_selinux_hide_running __read_mostly = false;' >> "$selinux_fixture/native.c"
+  fi
+  # Patch backups and stale generated files must not count as native symbols.
+  printf '%s\n' 'struct selinux_state fake_state;' 'bool ksu_selinux_hide_running;' \
+    > "$selinux_fixture/native.c.orig"
+  cp "$selinux_fixture/native.c.orig" "$selinux_fixture/compat/susfs_selinux_hide_compat.c"
+  echo 'kernelsu-objs += compat/susfs_selinux_hide_compat.o' > "$selinux_fixture/Kbuild"
+  patch_susfs_selinux_hide_compat "$selinux_fixture" >/dev/null
+  patch_susfs_selinux_hide_compat "$selinux_fixture" >/dev/null
+  cc -DCONFIG_KSU_SUSFS -fno-common -I "$selinux_fixture/include" \
+    -c "$selinux_fixture/native.c" -o "$selinux_fixture/native.o"
+  if [[ "$native_symbols" == both ]]; then
+    test ! -f "$selinux_fixture/compat/susfs_selinux_hide_compat.c" \
+      || fail "native SELinux symbols left a stale compatibility object"
+    test ! -s "$selinux_fixture/Kbuild" \
+      || fail "native SELinux symbols left stale Kbuild wiring"
+  else
+    assert_eq 1 "$(grep -c 'kernelsu-objs += compat/susfs_selinux_hide_compat.o' "$selinux_fixture/Kbuild")" \
+      "SELinux compatibility Kbuild idempotence ($native_symbols)"
+    cc -DCONFIG_KSU_SUSFS -fno-common -I "$selinux_fixture/include" \
+      -c "$selinux_fixture/compat/susfs_selinux_hide_compat.c" -o "$selinux_fixture/compat.o"
+    cc -r "$selinux_fixture/native.o" "$selinux_fixture/compat.o" -o "$selinux_fixture/linked.o" \
+      || fail "SELinux compatibility duplicates native symbols ($native_symbols)"
+  fi
+done
 
 ANYKERNEL_TEMPLATE_FIXTURE="$(mktemp)"
 printf '%s\n' placeholder > "$ANYKERNEL_TEMPLATE_FIXTURE"

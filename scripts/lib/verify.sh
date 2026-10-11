@@ -154,11 +154,11 @@ verify_susfs_source_integration() {
     local fake_state_def_re='^[[:space:]]*(__[A-Za-z0-9_]+[[:space:]]+)*struct[[:space:]]+selinux_state[[:space:]]+fake_state([[:space:];=]|$)'
     local running_def_re='^[[:space:]]*(__[A-Za-z0-9_]+[[:space:]]+)*bool[[:space:]]+ksu_selinux_hide_running([[:space:];=]|$)'
 
-    grep -R -Eq "$fake_state_def_re" "$ksu_kernel_dir" || {
+    grep -R --include='*.c' --include='*.h' -Eq "$fake_state_def_re" "$ksu_kernel_dir" || {
       echo "::error::KernelSU tree does not define fake_state required by the susfs SELinux hooks."
       exit 1
     }
-    grep -R -Eq "$running_def_re" "$ksu_kernel_dir" || {
+    grep -R --include='*.c' --include='*.h' -Eq "$running_def_re" "$ksu_kernel_dir" || {
       echo "::error::KernelSU tree does not define ksu_selinux_hide_running required by the susfs SELinux hooks."
       exit 1
     }
