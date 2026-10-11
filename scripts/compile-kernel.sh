@@ -273,6 +273,13 @@ if [[ "$BUILD_MODE" == "Patch/config validation only" ]]; then
   if [[ "${#SMOKE_TARGETS[@]}" -gt 0 ]]; then
     BUILD_PHASE="integration object smoke compile"
     COMPILE_STARTED_AT="$(date +%s)"
+    # A partial driver build does not visit the directories that generate
+    # compile.h and the SELinux flask/permission headers used by KernelSU.
+    if ! make -j"$(nproc)" "${MAKE_ARGS[@]}" init/ security/selinux/; then
+      COMPILE_SECONDS=$((COMPILE_SECONDS + $(date +%s) - COMPILE_STARTED_AT))
+      echo '::error::KernelSU generated-header preparation failed.'
+      exit 1
+    fi
     if ! make -j"$(nproc)" "${MAKE_ARGS[@]}" "${SMOKE_TARGETS[@]}" 2>&1 | tee integration-smoke.log; then
       COMPILE_SECONDS=$((COMPILE_SECONDS + $(date +%s) - COMPILE_STARTED_AT))
       echo "::error::SUSFS/NoMount/ZeroMount/KPM integration object smoke compile failed."
