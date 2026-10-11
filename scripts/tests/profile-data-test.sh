@@ -93,7 +93,7 @@ grep -Fq 'clone_repo "$MODULES_REPO" "$MODULES_BRANCH"' "${SCRIPT_DIR}/../clone-
   || fail "modules checkout must use its independently resolved branch"
 grep -Fq 'MAKE_ARGS+=("${KERNEL_MAKE_FLAG_ARRAY[@]}")' "$COMPILE_SCRIPT" \
   || fail "compile script must pass profile-specific flags to every make invocation"
-grep -Fq 'make "${MAKE_ARGS[@]}" certs/extract-cert' "$COMPILE_SCRIPT" \
+grep -Fq 'make "${MAKE_ARGS[@]}" "$EXTRACT_CERT_OBJECT"' "$COMPILE_SCRIPT" \
   || fail "validation mode must smoke-compile the kernel certificate host tool"
 grep -Fq 'local max_attempts=5' "$GIT_HELPERS_SCRIPT" \
   || fail "git network helpers must tolerate a longer transient outage"
@@ -728,6 +728,18 @@ patch_anykernel_app_flash_staging "$APP_STAGING_FIXTURE"
 assert_eq "$APP_STAGING_HASH" \
   "$(sha256sum "$APP_STAGING_FIXTURE" | cut -d' ' -f1)" \
   "AnyKernel app-flasher staging idempotence"
+
+(
+  cd "$EXTRACT_CERT_FIXTURE_DIR"
+  if detect_extract_cert_source >/dev/null; then
+    fail "certificate source detection accepted a missing source"
+  fi
+  mkdir -p scripts certs
+  touch scripts/extract-cert.c
+  assert_eq scripts/extract-cert.c "$(detect_extract_cert_source)" "5.15 certificate source layout"
+  touch certs/extract-cert.c
+  assert_eq certs/extract-cert.c "$(detect_extract_cert_source)" "6.1 certificate source layout"
+)
 
 cat > "$EXTRACT_CERT_FIXTURE_DIR/extract-cert.c" <<'EOF'
 #include <openssl/engine.h>

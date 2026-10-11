@@ -74,6 +74,17 @@ detect_kernelsu_driver_dir() {
   fi
 }
 
+detect_extract_cert_source() {
+  local source_file
+  for source_file in certs/extract-cert.c scripts/extract-cert.c; do
+    if [[ -f "$source_file" ]]; then
+      echo "$source_file"
+      return 0
+    fi
+  done
+  return 1
+}
+
 # Repair a stable-backport merge regression where key_pass was guarded as if
 # the OpenSSL provider implementation were present, while the older ENGINE
 # implementation still referenced it unconditionally. Keep this deliberately
