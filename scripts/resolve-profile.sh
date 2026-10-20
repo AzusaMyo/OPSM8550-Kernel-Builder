@@ -102,8 +102,8 @@ case "$KSU_TYPE" in
     KSU_REPO="https://github.com/SukiSU-Ultra/SukiSU-Ultra.git"
     KSU_REF="main"
     ;;
-  ReSukiSU*)
-    KSU_REPO="https://github.com/ReSukiSU/ReSukiSU.git"
+  BakaSU*)
+    KSU_REPO="https://github.com/Baka-SU/BakaSU.git"
     KSU_REF="main"
     ;;
 esac

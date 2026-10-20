@@ -97,21 +97,26 @@ Available workflow presets:
 | `SukiSU Ultra + SUSFS + KPM (experimental)` | SukiSU Ultra with SUSFS and KPM | Experimental |
 | `SukiSU Ultra + SUSFS + ZeroMount + KPM (experimental)` | SukiSU Ultra with SUSFS, ZeroMount, and KPM | Experimental |
 | `SukiSU Ultra + SUSFS + NoMount + KPM (experimental)` | SukiSU Ultra with SUSFS, NoMount, and KPM | Experimental |
-| `ReSukiSU` | ReSukiSU | Supported |
-| `ReSukiSU + susfs` | ReSukiSU with SUSFS | Supported |
-| `ReSukiSU + SUSFS + ZeroMount (experimental)` | ReSukiSU with SUSFS and ZeroMount | Experimental |
-| `ReSukiSU + SUSFS + NoMount (experimental)` | ReSukiSU with SUSFS and NoMount | Experimental |
+| `BakaSU` | BakaSU | Supported |
+| `BakaSU + SUSFS` | BakaSU with SUSFS | Supported |
+| `BakaSU + SUSFS + ZeroMount (experimental)` | BakaSU with SUSFS and ZeroMount | Experimental |
+| `BakaSU + SUSFS + NoMount (experimental)` | BakaSU with SUSFS and NoMount | Experimental |
+
+BakaSU (formerly ReSukiSU) is fetched from
+[`Baka-SU/BakaSU`](https://github.com/Baka-SU/BakaSU) at an exact resolved `main`
+commit. Legacy ReSukiSU preset inputs remain accepted and resolve to the matching
+BakaSU integration; package names and provenance use `BakaSU`.
 
 Selecting `Build all 3 featured SUSFS variants (batch)` starts a three-entry
 matrix in which all three SUSFS integrations also include NoMount. Selecting
 `Build all 3 ZeroMount variants (batch)` instead builds `SukiSU Ultra + SUSFS +
-ZeroMount + KPM`, `ReSukiSU + SUSFS + ZeroMount`, and
+ZeroMount + KPM`, `BakaSU + SUSFS + ZeroMount`, and
 `KernelSU-Next + SUSFS + ZeroMount`.
 Each entry keeps its own package and diagnostics artifact; release mode publishes
 all three builds under the same immutable release tag.
 
 KPM is available only through the dedicated SukiSU Ultra presets because current
-ReSukiSU no longer supports it. The pipeline resolves SukiSU Ultra to an exact
+BakaSU no longer supports it. The pipeline resolves SukiSU Ultra to an exact
 `main` commit, checks its KPM sources and Kbuild wiring, and enables `CONFIG_KPM`,
 `CONFIG_KALLSYMS`, and `CONFIG_KALLSYMS_ALL`. The SUSFS presets additionally
 resolve and apply the matching SUSFS branch at an exact commit. The four-feature
@@ -261,11 +266,11 @@ resolves exact commits for all twelve profiles, then runs a twenty-five-job
 smoke-test matrix: KernelSU-Next + SUSFS + NoMount, SukiSU Ultra + SUSFS +
 NoMount + KPM
 (including the crDroid OnePlus 12 / Android 6.1 vendor include drift),
-and ReSukiSU + SUSFS + NoMount are validated on representative SM7550 (including
+and BakaSU + SUSFS + NoMount are validated on representative SM7550 (including
 both CE4 source families), SM8450, SM8550, and SM8650 sources, with an additional
 baseline validation for the LunarisOS OnePlus 11 and crDroid OnePlus 12 sources.
 The SukiSU Ultra ZeroMount preset is validated across the representative
-5.10, 5.15, and 6.1 source families; the KernelSU-Next and ReSukiSU ZeroMount
+5.10, 5.15, and 6.1 source families; the KernelSU-Next and BakaSU ZeroMount
 presets additionally run against the representative SM8550 LineageOS source.
 
 ## Important limitations

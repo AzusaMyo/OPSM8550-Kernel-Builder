@@ -293,8 +293,8 @@ echo "[+] Kernel release identity verified: ${KERNEL_RELEASE}"
 if [[ "$KSU_TYPE" == *susfs* ]]; then
   echo "==== SUSFS CONFIG SNAPSHOT ===="
   grep -E '^CONFIG_KSU_SUSFS|^CONFIG_KSU_MANUAL_HOOK|^CONFIG_TMPFS_XATTR=|^CONFIG_NOMOUNT=' out/.config || true
-  if [[ "$KSU_TYPE" == ReSukiSU* ]]; then
-    verify_resukisu_susfs_hook_mode
+  if [[ "$KSU_TYPE" == BakaSU* ]]; then
+    verify_bakasu_susfs_hook_mode
   fi
   verify_susfs_binary_presence
 fi

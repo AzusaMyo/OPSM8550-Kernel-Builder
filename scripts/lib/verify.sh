@@ -164,31 +164,31 @@ verify_susfs_source_integration() {
     }
   fi
 
-  if [[ "$KSU_TYPE" == ReSukiSU* ]]; then
+  if [[ "$KSU_TYPE" == BakaSU* ]]; then
     test -f "$runtime_file" || {
-      echo "::error::ReSukiSU runtime file is missing at ${runtime_file}"
+      echo "::error::BakaSU runtime file is missing at ${runtime_file}"
       exit 1
     }
 
     grep -Eq '^[[:space:]]*DEFINE_STATIC_KEY_TRUE\(ksu_is_init_rc_hook_enabled\);$' "$runtime_file" || {
-      echo "::error::ReSukiSU runtime compat is missing ksu_is_init_rc_hook_enabled, so susfs builds will fail or silently fall back."
+      echo "::error::BakaSU runtime compat is missing ksu_is_init_rc_hook_enabled, so susfs builds will fail or silently fall back."
       exit 1
     }
 
     grep -Eq '^[[:space:]]*DEFINE_STATIC_KEY_TRUE\(ksu_is_input_hook_enabled\);$' "$runtime_file" || {
-      echo "::error::ReSukiSU runtime compat is missing ksu_is_input_hook_enabled, so susfs builds will fail or silently fall back."
+      echo "::error::BakaSU runtime compat is missing ksu_is_input_hook_enabled, so susfs builds will fail or silently fall back."
       exit 1
     }
 
     if ! grep -Eq '^[[:space:]]*#define ksu_init_rc_hook ksu_is_init_rc_hook_enabled$' "$runtime_file" && \
        ! grep -Eq '^[[:space:]]*#define ksu_init_rc_hook_inactive\(\) \(!static_branch_likely\(&ksu_is_init_rc_hook_enabled\)\)$' "$runtime_file"; then
-      echo "::error::ReSukiSU runtime compat is not pointing init_rc hook to the susfs static key."
+      echo "::error::BakaSU runtime compat is not pointing init_rc hook to the susfs static key."
       exit 1
     fi
 
     if ! grep -Eq '^[[:space:]]*#define ksu_input_hook ksu_is_input_hook_enabled$' "$runtime_file" && \
        ! grep -Eq '^[[:space:]]*#define ksu_input_hook_inactive\(\) \(!static_branch_likely\(&ksu_is_input_hook_enabled\)\)$' "$runtime_file"; then
-      echo "::error::ReSukiSU runtime compat is not pointing input hook to the susfs static key."
+      echo "::error::BakaSU runtime compat is not pointing input hook to the susfs static key."
       exit 1
     fi
   fi
@@ -396,29 +396,29 @@ verify_nomount_binary_presence() {
   } | tee nomount-proof.txt
 }
 
-verify_resukisu_susfs_hook_mode() {
+verify_bakasu_susfs_hook_mode() {
   test -f build.log || {
-    echo "::error::build.log is missing, cannot verify ReSukiSU hook mode."
+    echo "::error::build.log is missing, cannot verify BakaSU hook mode."
     exit 1
   }
 
   if grep -Eq 'using KSU_TRACEPOINT_HOOK|using Tracepoint Syscall Redirect Hook' build.log; then
-    echo "::error::ReSukiSU fell back to KSU_TRACEPOINT_HOOK, so the manager will not detect susfs inline mode."
+    echo "::error::BakaSU fell back to KSU_TRACEPOINT_HOOK, so the manager will not detect susfs inline mode."
     exit 1
   fi
 
   if grep -Eq 'using KSU_MANUAL_HOOK|using Manual Hook' build.log; then
-    echo "::error::ReSukiSU fell back to KSU_MANUAL_HOOK, so this build is not the expected susfs inline mode."
+    echo "::error::BakaSU fell back to KSU_MANUAL_HOOK, so this build is not the expected susfs inline mode."
     exit 1
   fi
 
   grep -Eq 'using SUSFS_INLINE_HOOK|using SuSFS Inline hook' build.log || {
-    echo "::error::ReSukiSU did not report SUSFS_INLINE_HOOK in build.log."
+    echo "::error::BakaSU did not report SUSFS_INLINE_HOOK in build.log."
     exit 1
   }
 
   {
-    echo "==== RESUKISU SUSFS HOOK PROOF ===="
+    echo "==== BAKASU SUSFS HOOK PROOF ===="
     echo "kernel_branch=${KERNEL_BRANCH}"
     echo "kernel_commit=${KERNEL_COMMIT}"
     echo "modules_branch=${MODULES_BRANCH}"

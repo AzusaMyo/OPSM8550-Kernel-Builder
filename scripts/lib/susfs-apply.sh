@@ -299,7 +299,7 @@ patch_kernelsu_for_susfs() {
   }
 }
 
-patch_resukisu_susfs_runtime_compat() {
+patch_bakasu_susfs_runtime_compat() {
   local ksu_kernel_dir="$1"
   local runtime_file="${ksu_kernel_dir}/runtime/ksud_integration.c"
 
@@ -310,7 +310,7 @@ patch_resukisu_susfs_runtime_compat() {
      grep -Eq '^[[:space:]]*DEFINE_STATIC_KEY_TRUE\(ksu_is_input_hook_enabled\);$' "$runtime_file" && \
      grep -Eq '^[[:space:]]*#define ksu_init_rc_hook_inactive\(\) \(!static_branch_likely\(&ksu_is_init_rc_hook_enabled\)\)$' "$runtime_file" && \
      grep -Eq '^[[:space:]]*#define ksu_input_hook_inactive\(\) \(!static_branch_likely\(&ksu_is_input_hook_enabled\)\)$' "$runtime_file"; then
-    echo "[+] ReSukiSU runtime already contains native susfs hook support."
+    echo "[+] BakaSU runtime already contains native susfs hook support."
     return 0
   fi
 
@@ -443,8 +443,8 @@ apply_susfs_full() {
   mkdir -p "${ksu_kernel_dir}/include/linux"
   cp ./susfs/kernel_patches/include/linux/* "${ksu_kernel_dir}/include/linux/"
   patch_kernelsu_for_susfs "${ksu_repo_dir}" "${ksu_kernel_dir}"
-  if [[ "$KSU_TYPE" == ReSukiSU* ]]; then
-    patch_resukisu_susfs_runtime_compat "${ksu_kernel_dir}"
+  if [[ "$KSU_TYPE" == BakaSU* ]]; then
+    patch_bakasu_susfs_runtime_compat "${ksu_kernel_dir}"
   fi
   patch_susfs_selinux_hide_compat "${ksu_kernel_dir}"
 

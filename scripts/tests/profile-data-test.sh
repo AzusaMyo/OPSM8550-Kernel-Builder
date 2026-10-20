@@ -164,16 +164,37 @@ assert_eq "https://github.com/osm1019/android_kernel_oneplus_sm8550-modules.git"
 assert_eq "los" "$MODULES_BRANCH_OVERRIDE" "LunarisOS modules branch"
 assert_eq "lunarisos" "$SOURCE_SLUG" "LunarisOS source slug"
 
-resolve_root_solution "ReSukiSU + susfs"
-assert_eq "ReSukiSU-with-susfs" "$KSU_TYPE" "root mapping"
+resolve_root_solution "BakaSU + SUSFS"
+assert_eq "BakaSU-with-susfs" "$KSU_TYPE" "root mapping"
+for bakasu_suffix in "" " + SUSFS" " + SUSFS + NoMount (experimental)" " + SUSFS + ZeroMount (experimental)"; do
+  resolve_root_solution "BakaSU${bakasu_suffix}"
+  bakasu_type="$KSU_TYPE"
+  grep -Fxq "          - BakaSU${bakasu_suffix}" "$WORKFLOW_FILE" \
+    || fail "workflow is missing BakaSU${bakasu_suffix}"
+  legacy_suffix="$bakasu_suffix"
+  [[ "$legacy_suffix" != " + SUSFS" ]] || legacy_suffix=" + susfs"
+  resolve_root_solution "ReSukiSU${legacy_suffix}"
+  assert_eq "$bakasu_type" "$KSU_TYPE" "legacy ReSukiSU${legacy_suffix} mapping"
+  (
+    # shellcheck source=../lib/ksu-setup.sh
+    . "$KSU_SETUP_SCRIPT"
+    KSU_COMMIT=1111111111111111111111111111111111111111
+    setup_kernelsu_repo() {
+      assert_eq "Baka-SU" "$1" "BakaSU checkout owner"
+      assert_eq "BakaSU" "$2" "BakaSU checkout repository"
+      assert_eq "$KSU_COMMIT" "$3" "BakaSU checkout exact commit"
+    }
+    install_ksu_variant "$KSU_TYPE"
+  )
+done
 resolve_root_solution "KernelSU-Next + SUSFS"
 assert_eq "KernelSU-Next-with-susfs" "$KSU_TYPE" "KernelSU-Next SUSFS root mapping"
 resolve_root_solution "KernelSU-Next + SUSFS + NoMount (experimental)"
 assert_eq "KernelSU-Next-with-susfs-nomount" "$KSU_TYPE" "KernelSU-Next NoMount root mapping"
 resolve_root_solution "KernelSU-Next + SUSFS + ZeroMount (experimental)"
 assert_eq "KernelSU-Next-with-susfs-zeromount" "$KSU_TYPE" "KernelSU-Next ZeroMount root mapping"
-resolve_root_solution "ReSukiSU + SUSFS + NoMount (experimental)"
-assert_eq "ReSukiSU-with-susfs-nomount" "$KSU_TYPE" "NoMount root mapping"
+resolve_root_solution "BakaSU + SUSFS + NoMount (experimental)"
+assert_eq "BakaSU-with-susfs-nomount" "$KSU_TYPE" "NoMount root mapping"
 resolve_root_solution "SukiSU Ultra + KPM (experimental)"
 assert_eq "SukiSU-Ultra-with-KPM" "$KSU_TYPE" "KPM root mapping"
 resolve_root_solution "SukiSU Ultra + SUSFS + KPM (experimental)"
@@ -182,9 +203,9 @@ resolve_root_solution "SukiSU Ultra + SUSFS + NoMount + KPM (experimental)"
 assert_eq "SukiSU-Ultra-with-susfs-nomount-KPM" "$KSU_TYPE" "SukiSU SUSFS/NoMount/KPM root mapping"
 resolve_root_solution "SukiSU Ultra + SUSFS + ZeroMount + KPM (experimental)"
 assert_eq "SukiSU-Ultra-with-susfs-zeromount-KPM" "$KSU_TYPE" "SukiSU SUSFS/ZeroMount/KPM root mapping"
-resolve_root_solution "ReSukiSU + SUSFS + ZeroMount (experimental)"
-assert_eq "ReSukiSU-with-susfs-zeromount" "$KSU_TYPE" "ReSukiSU ZeroMount root mapping"
-grep -Fq -- '- ReSukiSU + SUSFS + NoMount (experimental)' "$WORKFLOW_FILE" \
+resolve_root_solution "BakaSU + SUSFS + ZeroMount (experimental)"
+assert_eq "BakaSU-with-susfs-zeromount" "$KSU_TYPE" "BakaSU ZeroMount root mapping"
+grep -Fq -- '- BakaSU + SUSFS + NoMount (experimental)' "$WORKFLOW_FILE" \
   || fail "workflow is missing the NoMount root option"
 grep -Fq -- '- KernelSU-Next + SUSFS' "$WORKFLOW_FILE" \
   || fail "workflow is missing the KernelSU-Next SUSFS root option"
@@ -196,9 +217,9 @@ grep -Fq -- '- Build all 3 ZeroMount variants (batch)' "$WORKFLOW_FILE" \
   || fail "workflow is missing the three-variant ZeroMount batch option"
 grep -Fq 'name: Build ${{ matrix.root_solution }}' "$WORKFLOW_FILE" \
   || fail "workflow build job does not use the root-solution matrix"
-grep -Fq '"SukiSU Ultra + SUSFS + NoMount + KPM (experimental)","ReSukiSU + SUSFS + NoMount (experimental)","KernelSU-Next + SUSFS + NoMount (experimental)"' "$WORKFLOW_FILE" \
+grep -Fq '"SukiSU Ultra + SUSFS + NoMount + KPM (experimental)","BakaSU + SUSFS + NoMount (experimental)","KernelSU-Next + SUSFS + NoMount (experimental)"' "$WORKFLOW_FILE" \
   || fail "workflow featured SUSFS batch matrix does not contain all three NoMount variants"
-grep -Fq '"SukiSU Ultra + SUSFS + ZeroMount + KPM (experimental)","ReSukiSU + SUSFS + ZeroMount (experimental)","KernelSU-Next + SUSFS + ZeroMount (experimental)"' "$WORKFLOW_FILE" \
+grep -Fq '"SukiSU Ultra + SUSFS + ZeroMount + KPM (experimental)","BakaSU + SUSFS + ZeroMount (experimental)","KernelSU-Next + SUSFS + ZeroMount (experimental)"' "$WORKFLOW_FILE" \
   || fail "workflow batch matrix does not contain the three ZeroMount variants"
 grep -Fq 'ARTIFACT_NAME="kernel-package-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${KSU_TYPE}"' "$WORKFLOW_FILE" \
   || fail "workflow package artifact names must be unique across the batch matrix"
@@ -222,8 +243,8 @@ grep -Fq -- '- KernelSU-Next + SUSFS + NoMount (experimental)' "$UPSTREAM_HEALTH
   || fail "upstream health is missing KernelSU-Next NoMount"
 grep -Fq -- '- integration: KernelSU-Next + SUSFS + ZeroMount (experimental)' "$UPSTREAM_HEALTH_WORKFLOW" \
   || fail "upstream health is missing KernelSU-Next ZeroMount"
-grep -Fq -- '- integration: ReSukiSU + SUSFS + ZeroMount (experimental)' "$UPSTREAM_HEALTH_WORKFLOW" \
-  || fail "upstream health is missing ReSukiSU ZeroMount"
+grep -Fq -- '- integration: BakaSU + SUSFS + ZeroMount (experimental)' "$UPSTREAM_HEALTH_WORKFLOW" \
+  || fail "upstream health is missing BakaSU ZeroMount"
 grep -Fq -- '- SukiSU Ultra + SUSFS + ZeroMount + KPM (experimental)' "$UPSTREAM_HEALTH_WORKFLOW" \
   || fail "upstream health is missing SukiSU ZeroMount"
 grep -Fq 'SukiSU-Ultra-with-KPM|SukiSU-Ultra-with-susfs-KPM|SukiSU-Ultra-with-susfs-nomount-KPM|SukiSU-Ultra-with-susfs-zeromount-KPM)' "$RESOLVER_SCRIPT" \
@@ -339,6 +360,51 @@ ANYKERNEL_PACKAGE_FIXTURE_DIR="$(mktemp -d)"
 ANYKERNEL_SLOT_FIXTURE_DIR="$(mktemp -d)"
 SUSFS_VENDOR_FIXTURE_DIR="$(mktemp -d)"
 trap 'rm -f "$ANYKERNEL_FIXTURE" "$UPDATE_BINARY_FIXTURE" "$APP_STAGING_FIXTURE" "$KPM_CONFIG_FIXTURE" "$KSUN_NOMOUNT_CONFIG_FIXTURE" "$ZEROMOUNT_CONFIG_FIXTURE" "$MODULE_CONFIG_FIXTURE" "$SCMVERSION_FIXTURE"; rm -rf "$KPM_VERIFY_FIXTURE" "$NOMOUNT_FIXTURE_DIR" "$ZEROMOUNT_FIXTURE_DIR" "$EXTRACT_CERT_FIXTURE_DIR" "$ANYKERNEL_CACHE_FIXTURE_DIR" "$ANYKERNEL_PACKAGE_FIXTURE_DIR" "$ANYKERNEL_SLOT_FIXTURE_DIR" "$SUSFS_VENDOR_FIXTURE_DIR"' EXIT
+
+# Exercise the real resolver with deterministic refs, including legacy inputs.
+(
+  export BAKASU_RESOLVER_FIXTURE="${NOMOUNT_FIXTURE_DIR}/bakasu-resolver"
+  mkdir -p "$BAKASU_RESOLVER_FIXTURE"
+  git() {
+    if [[ "$1" == ls-remote ]]; then
+      printf '%s\n' "$*" >> "$BAKASU_RESOLVER_FIXTURE/git.log"
+      printf '%s\t%s\n' 1111111111111111111111111111111111111111 refs/heads/main
+    else
+      command git "$@"
+    fi
+  }
+  export -f git
+  for root_name in BakaSU ReSukiSU; do
+    for suffix in "" " + SUSFS" " + SUSFS + NoMount (experimental)" " + SUSFS + ZeroMount (experimental)"; do
+      [[ "$root_name$suffix" != "ReSukiSU + SUSFS" ]] || suffix=" + susfs"
+      resolve_root_solution "$root_name$suffix"
+      : > "$BAKASU_RESOLVER_FIXTURE/git.log"
+      : > "$BAKASU_RESOLVER_FIXTURE/env"
+      INPUT_BUILD_PROFILE="SM8550 | OnePlus 11 / 12R | LineageOS (recommended)" \
+        INPUT_BRANCH_MODE="manual" \
+        INPUT_KERNEL_BRANCH="lineage-23.0" \
+        INPUT_CLANG_CHOICE="Recommended (auto-select based on branch)" \
+        INPUT_ROOT_SOLUTION="$root_name$suffix" \
+        INPUT_BUILD_MODE="Patch/config validation only" \
+        GITHUB_ENV="$BAKASU_RESOLVER_FIXTURE/env" \
+        GITHUB_OUTPUT="$BAKASU_RESOLVER_FIXTURE/output" \
+        GITHUB_STEP_SUMMARY="$BAKASU_RESOLVER_FIXTURE/summary" \
+        bash "$RESOLVER_SCRIPT"
+      grep -Fxq "KSU_TYPE=$KSU_TYPE" "$BAKASU_RESOLVER_FIXTURE/env" \
+        || fail "resolver did not normalize $root_name$suffix"
+      grep -Fxq 'KSU_REPO=https://github.com/Baka-SU/BakaSU.git' "$BAKASU_RESOLVER_FIXTURE/env" \
+        || fail "resolver did not use the canonical BakaSU repository"
+      grep -Fxq 'KSU_COMMIT=1111111111111111111111111111111111111111' "$BAKASU_RESOLVER_FIXTURE/env" \
+        || fail "resolver did not pin the BakaSU commit"
+      grep -Fxq 'ls-remote --exit-code https://github.com/Baka-SU/BakaSU.git refs/heads/main' \
+        "$BAKASU_RESOLVER_FIXTURE/git.log" \
+        || fail "resolver did not look up the BakaSU main branch"
+      if grep -Fq 'github.com/ReSukiSU/' "$BAKASU_RESOLVER_FIXTURE/git.log"; then
+        fail "resolver still contacts the old ReSukiSU repository"
+      fi
+    done
+  done
+)
 
 mkdir -p "$ZEROMOUNT_FIXTURE_DIR/fs"
 cat > "$ZEROMOUNT_FIXTURE_DIR/fs/stat.c" <<'EOF'

@@ -245,10 +245,11 @@ resolve_root_solution() {
     "SukiSU Ultra + SUSFS + KPM (experimental)") KSU_TYPE="SukiSU-Ultra-with-susfs-KPM" ;;
     "SukiSU Ultra + SUSFS + ZeroMount + KPM (experimental)") KSU_TYPE="SukiSU-Ultra-with-susfs-zeromount-KPM" ;;
     "SukiSU Ultra + SUSFS + NoMount + KPM (experimental)") KSU_TYPE="SukiSU-Ultra-with-susfs-nomount-KPM" ;;
-    "ReSukiSU") KSU_TYPE="ReSukiSU" ;;
-    "ReSukiSU + susfs") KSU_TYPE="ReSukiSU-with-susfs" ;;
-    "ReSukiSU + SUSFS + ZeroMount (experimental)") KSU_TYPE="ReSukiSU-with-susfs-zeromount" ;;
-    "ReSukiSU + SUSFS + NoMount (experimental)") KSU_TYPE="ReSukiSU-with-susfs-nomount" ;;
+    # Keep existing workflow_dispatch clients working after the upstream rename.
+    "BakaSU"|"ReSukiSU") KSU_TYPE="BakaSU" ;;
+    "BakaSU + SUSFS"|"ReSukiSU + susfs") KSU_TYPE="BakaSU-with-susfs" ;;
+    "BakaSU + SUSFS + ZeroMount (experimental)"|"ReSukiSU + SUSFS + ZeroMount (experimental)") KSU_TYPE="BakaSU-with-susfs-zeromount" ;;
+    "BakaSU + SUSFS + NoMount (experimental)"|"ReSukiSU + SUSFS + NoMount (experimental)") KSU_TYPE="BakaSU-with-susfs-nomount" ;;
     *)
       echo "::error::Unsupported root solution: $1"
       return 1
