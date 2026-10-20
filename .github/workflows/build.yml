@@ -35,8 +35,9 @@ on:
         description: Only used in manual mode
         required: true
         type: choice
-        default: "16.0"
+        default: "17.0"
         options:
+          - "17.0"
           - "16.0"
           - "15.0"
           - "14.0"
@@ -65,6 +66,7 @@ on:
         options:
           - Recommended (auto-select based on branch)
           - clang-r596125 (Clang 22.0.2 / current AOSP mainline era)
+          - clang-r584948 (Android 17 / crDroid 13 era)
           - clang-r563880c (Android 16 / LineageOS 23.2+ era)
           - clang-r547379 (Android 16 / LineageOS 23.0 era)
           - clang-r536225 (Android 15 / LineageOS 22.2 era)
@@ -103,6 +105,14 @@ on:
           - Patch/config validation only
           - Full build (artifact only)
           - Full build and publish release
+      rom_gki_module_compat:
+        description: OP12 crDroid only; allow the ROM's system_dlkm modules with a custom Image (reduces GKI module protection)
+        required: true
+        type: choice
+        default: Strict GKI module checks (default)
+        options:
+          - Strict GKI module checks (default)
+          - Use existing ROM system_dlkm modules (experimental)
 
 permissions:
   contents: read
@@ -157,7 +167,7 @@ jobs:
       matrix:
         root_solution: ${{ fromJSON(inputs.root_solution == 'Build all 3 featured SUSFS variants (batch)' && '["SukiSU Ultra + SUSFS + NoMount + KPM (experimental)","BakaSU + SUSFS + NoMount (experimental)","KernelSU-Next + SUSFS + NoMount (experimental)"]' || inputs.root_solution == 'Build all 3 ZeroMount variants (batch)' && '["SukiSU Ultra + SUSFS + ZeroMount + KPM (experimental)","BakaSU + SUSFS + ZeroMount (experimental)","KernelSU-Next + SUSFS + ZeroMount (experimental)"]' || format('["{0}"]', inputs.root_solution)) }}
     concurrency:
-      group: kernel-ci-${{ github.ref_name }}-${{ inputs.build_profile }}-${{ matrix.root_solution }}-${{ inputs.branch_mode }}-${{ inputs.kernel_branch }}-${{ inputs.build_mode }}
+      group: kernel-ci-${{ github.ref_name }}-${{ inputs.build_profile }}-${{ matrix.root_solution }}-${{ inputs.branch_mode }}-${{ inputs.kernel_branch }}-${{ inputs.clang_choice }}-${{ inputs.rom_gki_module_compat }}-${{ inputs.build_mode }}
       cancel-in-progress: true
 
     env:
@@ -178,6 +188,7 @@ jobs:
           INPUT_CLANG_CHOICE: ${{ inputs.clang_choice }}
           INPUT_ROOT_SOLUTION: ${{ matrix.root_solution }}
           INPUT_BUILD_MODE: ${{ inputs.build_mode }}
+          INPUT_ROM_GKI_MODULE_COMPAT: ${{ inputs.rom_gki_module_compat }}
         run: bash scripts/resolve-profile.sh
 
       - name: Set build metadata
@@ -188,7 +199,7 @@ jobs:
           BUILD_TIMESTAMP="$(date -u +'%Y%m%d_%H%M%S')"
           ARTIFACT_NAME="kernel-package-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${KSU_TYPE}"
           DIAGNOSTICS_NAME="kernel-diagnostics-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${KSU_TYPE}"
-          CCACHE_KEY_PREFIX="${RUNNER_OS}-ccache-v2-${SOC}-${SOURCE_SLUG}-${PROFILE_ID}-${SAFE_KERNEL_BRANCH}-${CLANG_VERSION}-${KSU_TYPE}"
+          CCACHE_KEY_PREFIX="${RUNNER_OS}-ccache-v2-${SOC}-${SOURCE_SLUG}-${PROFILE_ID}-${SAFE_KERNEL_BRANCH}-${CLANG_VERSION}-${KSU_TYPE}-${ROM_GKI_MODULE_COMPAT}"
           CCACHE_EPOCH="$(date -u +'%G-W%V')"
           {
             echo "BUILD_TIMESTAMP=${BUILD_TIMESTAMP}"
@@ -196,7 +207,7 @@ jobs:
             echo "ARTIFACT_NAME=${ARTIFACT_NAME}"
             echo "DIAGNOSTICS_NAME=${DIAGNOSTICS_NAME}"
             echo "CCACHE_KEY_PREFIX=${CCACHE_KEY_PREFIX}"
-            echo "CCACHE_KEY=${CCACHE_KEY_PREFIX}-${CCACHE_EPOCH}"
+            echo "CCACHE_KEY=${CCACHE_KEY_PREFIX}-${CCACHE_EPOCH}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           } >> "$GITHUB_ENV"
           {
             echo "artifact_name=${ARTIFACT_NAME}"
@@ -258,19 +269,34 @@ jobs:
             libdw-dev \
             libelf-dev \
             libssl-dev \
+            lld \
+            llvm \
             lz4 \
             python3 \
             zip
+
+      - name: Reclaim hosted runner disk for kernel linking
+        if: inputs.build_mode != 'Patch/config validation only' && runner.environment == 'github-hosted'
+        run: |
+          set -euo pipefail
+          # These preinstalled SDKs are unused by this native kernel build.
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
+          df -h "${RUNNER_TEMP}"
 
       - name: Set up build swap
         if: inputs.build_mode != 'Patch/config validation only'
         run: |
           set -euo pipefail
           SWAPFILE="${RUNNER_TEMP:-/tmp}/kernel-build-swapfile"
-          TOTAL_GB="$(awk '/MemTotal/ {printf "%d", $2 / 1024 / 1024}' /proc/meminfo)"
-          SWAP_GB=8
-          if (( TOTAL_GB < 12 )); then
-            SWAP_GB=16
+          AVAILABLE_GB="$(df -BG --output=avail "${RUNNER_TEMP:-/tmp}" | tail -n 1 | tr -dc '0-9')"
+          SWAP_GB=32
+          # Keep disk space for object files and the final kernel package.
+          if (( AVAILABLE_GB < SWAP_GB + 12 )); then
+            SWAP_GB=$((AVAILABLE_GB - 12))
+          fi
+          if (( SWAP_GB < 8 )); then
+            echo '::error::Insufficient disk space for kernel build swap.'
+            exit 1
           fi
           if ! swapon --show=NAME --noheadings | grep -Fxq "$SWAPFILE"; then
             sudo rm -f "$SWAPFILE"
@@ -279,7 +305,7 @@ jobs:
             sudo mkswap "$SWAPFILE"
             sudo swapon "$SWAPFILE"
           fi
-          sudo sysctl vm.swappiness=10
+          sudo sysctl vm.swappiness=60
           free -h
           swapon --show
 
@@ -324,6 +350,7 @@ jobs:
           include-hidden-files: true
           path: |
             ${{ github.workspace }}/${{ steps.resolve.outputs.soc }}/build.log
+            ${{ github.workspace }}/${{ steps.resolve.outputs.soc }}/build-resources.log
             ${{ github.workspace }}/${{ steps.resolve.outputs.soc }}/integration-smoke.log
             ${{ github.workspace }}/${{ steps.resolve.outputs.soc }}/susfs-source-proof.txt
             ${{ github.workspace }}/${{ steps.resolve.outputs.soc }}/susfs-hook-proof.txt

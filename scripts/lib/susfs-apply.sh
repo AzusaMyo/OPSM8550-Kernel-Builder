@@ -358,9 +358,15 @@ patch_susfs_selinux_hide_compat() {
   local compat_obj_line='kernelsu-objs += compat/susfs_selinux_hide_compat.o'
   local fake_state_def_re='^[[:space:]]*(__[A-Za-z0-9_]+[[:space:]]+)*struct[[:space:]]+selinux_state[[:space:]]+fake_state([[:space:];=]|$)'
   local running_def_re='^[[:space:]]*(__[A-Za-z0-9_]+[[:space:]]+)*bool[[:space:]]+ksu_selinux_hide_running([[:space:];=]|$)'
+  local has_fake_state=false has_running=false
 
-  if grep -R --exclude='susfs_selinux_hide_compat.c' -Eq "$fake_state_def_re" "$ksu_kernel_dir" && \
-     grep -R --exclude='susfs_selinux_hide_compat.c' -Eq "$running_def_re" "$ksu_kernel_dir"; then
+  if grep -R --include='*.c' --include='*.h' --exclude='susfs_selinux_hide_compat.c' -Eq "$fake_state_def_re" "$ksu_kernel_dir"; then
+    has_fake_state=true
+  fi
+  if grep -R --include='*.c' --include='*.h' --exclude='susfs_selinux_hide_compat.c' -Eq "$running_def_re" "$ksu_kernel_dir"; then
+    has_running=true
+  fi
+  if [[ "$has_fake_state" == true && "$has_running" == true ]]; then
     if [[ -f "$kbuild_file" ]]; then
       sed -i "\|^${compat_obj_line}$|d" "$kbuild_file"
     fi
@@ -381,10 +387,14 @@ patch_susfs_selinux_hide_compat() {
 #include "security.h"
 
 #ifdef CONFIG_KSU_SUSFS
-struct selinux_state fake_state;
-bool ksu_selinux_hide_running __read_mostly = false;
-#endif
 EOF_COMPAT
+  if [[ "$has_fake_state" == false ]]; then
+    echo 'struct selinux_state fake_state;' >> "$compat_file"
+  fi
+  if [[ "$has_running" == false ]]; then
+    echo 'bool ksu_selinux_hide_running __read_mostly = false;' >> "$compat_file"
+  fi
+  echo '#endif' >> "$compat_file"
 
   ensure_line_in_file "$kbuild_file" "$compat_obj_line"
   echo "[+] Added susfs SELinux hide compatibility symbols for this KernelSU tree."

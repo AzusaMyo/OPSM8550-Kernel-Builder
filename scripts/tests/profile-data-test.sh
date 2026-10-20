@@ -4,6 +4,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=../lib/profile-data.sh
 . "${SCRIPT_DIR}/../lib/profile-data.sh"
+# shellcheck source=../lib/git-helpers.sh
+. "${SCRIPT_DIR}/../lib/git-helpers.sh"
 # shellcheck source=../lib/anykernel-helpers.sh
 . "${SCRIPT_DIR}/../lib/anykernel-helpers.sh"
 # shellcheck source=../lib/nomount-setup.sh
@@ -55,6 +57,13 @@ grep -Fq 'type: choice' <<< "$kernel_branch_input" \
   || fail "manual kernel branch input must be a choice"
 grep -Fq -- '- "16.0"' <<< "$kernel_branch_input" \
   || fail "manual kernel branch choices must include crDroid 16.0"
+grep -Fq -- '- "17.0"' <<< "$kernel_branch_input" \
+  || fail "manual kernel branch choices must include crDroid 13 / Android 17"
+grep -Fq -- '- clang-r584948 (Android 17 / crDroid 13 era)' "$WORKFLOW_FILE" \
+  || fail "workflow must offer the crDroid 13 compiler"
+grep -Fq '/b896c53892be0ae507473a9f3dce67907edf4965/clang-r584948.tar.gz' \
+  "${SCRIPT_DIR}/../download-clang.sh" \
+  || fail "crDroid 13 compiler download must use the pinned AOSP revision"
 grep -Fq '"CC=ccache clang"' "$COMPILE_SCRIPT" \
   || fail "compile script is not passing ccache on the make command line"
 grep -Fq 'KBUILD_BUILD_TIMESTAMP=' "$COMPILE_SCRIPT" \
@@ -72,17 +81,19 @@ grep -Fq 'gh release create "$RELEASE_TAG"' "$WORKFLOW_FILE" \
   || fail "release workflow must publish the pre-reserved tag"
 grep -Fq 'gh api "repos/${GH_REPO}/git/refs/tags/${RELEASE_TAG}" --method DELETE' "$WORKFLOW_FILE" \
   || fail "release workflow must clean up a reserved tag after a failed build"
-grep -Eq '^[[:space:]]+lld \\' "$UPSTREAM_HEALTH_WORKFLOW" \
-  || fail "upstream health workflow is missing the LLVM linker"
-grep -Eq '^[[:space:]]+llvm \\' "$UPSTREAM_HEALTH_WORKFLOW" \
-  || fail "upstream health workflow is missing the LLVM binutils"
+for validation_workflow in "$WORKFLOW_FILE" "$UPSTREAM_HEALTH_WORKFLOW"; do
+  grep -Eq '^[[:space:]]+lld \\' "$validation_workflow" \
+    || fail "$validation_workflow is missing the LLVM linker"
+  grep -Eq '^[[:space:]]+llvm \\' "$validation_workflow" \
+    || fail "$validation_workflow is missing the LLVM binutils"
+done
 grep -Fq 'MODULES_CLONE_DIR="${UPSTREAM_SOC}-modules"' "$RESOLVER_SCRIPT" \
   || fail "community module checkout must preserve the upstream repository stem"
 grep -Fq 'clone_repo "$MODULES_REPO" "$MODULES_BRANCH"' "${SCRIPT_DIR}/../clone-sources.sh" \
   || fail "modules checkout must use its independently resolved branch"
 grep -Fq 'MAKE_ARGS+=("${KERNEL_MAKE_FLAG_ARRAY[@]}")' "$COMPILE_SCRIPT" \
   || fail "compile script must pass profile-specific flags to every make invocation"
-grep -Fq 'make "${MAKE_ARGS[@]}" certs/extract-cert' "$COMPILE_SCRIPT" \
+grep -Fq 'make "${MAKE_ARGS[@]}" "$EXTRACT_CERT_TARGET"' "$COMPILE_SCRIPT" \
   || fail "validation mode must smoke-compile the kernel certificate host tool"
 grep -Fq 'local max_attempts=5' "$GIT_HELPERS_SCRIPT" \
   || fail "git network helpers must tolerate a longer transient outage"
@@ -151,12 +162,21 @@ resolve_build_profile "SM8650 | OnePlus 12 | LineageOS (recommended)"
 assert_eq "CONFIG_OPLUS_DEVICE_DTBS=y CONFIG_WAFFLE_DTB=y" "$KERNEL_MAKE_FLAGS" "OnePlus 12 LineageOS make flags"
 resolve_build_profile "SM8650 | OnePlus 12 | crDroid"
 assert_eq "CONFIG_OPLUS_DEVICE_DTBS=y CONFIG_WAFFLE_DTB=y" "$KERNEL_MAKE_FLAGS" "OnePlus 12 crDroid make flags"
+resolve_build_profile "SM8550 | OnePlus 11 / 12R | crDroid"
+assert_eq "CONFIG_OPLUS_DEVICE_DTBS=y CONFIG_SALAMI_DTB=y CONFIG_ASTON_DTB=y" \
+  "$KERNEL_MAKE_FLAGS" "OnePlus 11 / 12R crDroid make flags"
+grep -Fq -- '- SM8550 | OnePlus 11 / 12R | crDroid' "$UPSTREAM_HEALTH_WORKFLOW" \
+  || fail "upstream health must exercise the crDroid SM8550 source"
 grep -Fq 'device_kernel_make_flags: ($kernel_make_flags | split(" ") | map(select(length > 0)))' "$ANYKERNEL_PACKAGE_SCRIPT" \
   || fail "build provenance does not record device kernel make flags"
 grep -Fq "out/Module.symvers" "$WORKFLOW_FILE" \
   || fail "diagnostics do not retain the kernel module CRC table"
-grep -Fq "it does not replace the ROM's vendor_dlkm modules" "$ANYKERNEL_PACKAGE_SCRIPT" \
-  || fail "release notes do not warn about the retained ROM vendor modules"
+grep -Fq "it does not replace the ROM's system_dlkm or vendor_dlkm modules" "$ANYKERNEL_PACKAGE_SCRIPT" \
+  || fail "release notes do not warn about the retained ROM modules"
+grep -Fq 'INPUT_ROM_GKI_MODULE_COMPAT: ${{ inputs.rom_gki_module_compat }}' "$WORKFLOW_FILE" \
+  || fail "workflow does not pass the selected ROM GKI module compatibility mode"
+grep -Fq 'rom_gki_module_compat: $rom_gki_module_compat' "$ANYKERNEL_PACKAGE_SCRIPT" \
+  || fail "package provenance does not record ROM GKI module compatibility"
 
 resolve_build_profile "SM8550 | OnePlus 11 | LunarisOS"
 assert_eq "https://github.com/osm1019/kernel_oneplus_sm8550.git" "$KERNEL_REPO_OVERRIDE" "LunarisOS kernel repository"
@@ -297,7 +317,7 @@ grep -Fq 'kernel/policy/allowlist.c.rej' "$SUSFS_APPLY_SCRIPT" \
   || fail "SukiSU drift resolver does not guard the allowlist reject"
 grep -Fq 'SukiSU KPM symbol resolver is not linked into kernelsu.o.' "${SCRIPT_DIR}/../lib/verify.sh" \
   || fail "KPM source verification does not check symbol resolver linkage"
-grep -Fq '"${KSU_DRIVER_DIR}/kernelsu/kernelsu.o"' "$COMPILE_SCRIPT" \
+grep -Fq '"${KSU_DRIVER_DIR}/kernelsu/"' "$COMPILE_SCRIPT" \
   || fail "KPM smoke compilation does not build the composite KernelSU object"
 grep -Fq 'out/${KSU_DRIVER_DIR}/kernelsu/infra/symbol_resolver.o' "${SCRIPT_DIR}/../lib/verify.sh" \
   || fail "KPM binary verification does not inspect the compiled symbol resolver object"
@@ -314,6 +334,20 @@ resolve_clang_version "Recommended (auto-select based on branch)" "lineage-23.2"
 assert_eq "clang-r563880c" "$CLANG_VERSION" "LineageOS 23.2 clang"
 resolve_clang_version "Recommended (auto-select based on branch)" "main"
 assert_eq "clang-r596125" "$CLANG_VERSION" "mainline clang"
+for android17_branch in 17.0 17.1 lineage-24.0 seventeen seventeen-qpr1 android17; do
+  resolve_clang_version "Recommended (auto-select based on branch)" "$android17_branch"
+  assert_eq "clang-r584948" "$CLANG_VERSION" "$android17_branch clang"
+  infer_android_versions "$android17_branch"
+  assert_eq "17" "$SUPPORTED_ANDROID_VERSIONS" "$android17_branch Android version"
+done
+resolve_clang_version "clang-r584948 (Android 17 / crDroid 13 era)" 16.0
+assert_eq "clang-r584948" "$CLANG_VERSION" "manual crDroid 13 compiler override"
+for older_branch in 13.0 14.0 15.0 16.0; do
+  infer_android_versions "$older_branch"
+  assert_eq "${older_branch%%.*}" "$SUPPORTED_ANDROID_VERSIONS" "$older_branch Android version"
+done
+resolve_clang_version "Recommended (auto-select based on branch)" 16.0
+assert_eq "clang-r563880c" "$CLANG_VERSION" "retained crDroid 12 compiler"
 
 resolve_susfs_settings sm8550 lineage-20.0
 assert_eq "gki-android13-5.15" "$SUSFS_REF" "Android 13 susfs"
@@ -321,6 +355,16 @@ resolve_susfs_settings sm8550 lineage-23.2
 assert_eq "gki-android14-5.15" "$SUSFS_REF" "Android 16 susfs"
 resolve_susfs_settings sm7550 lineage-23.0
 assert_eq "gki-android14-5.15" "$SUSFS_REF" "Nord CE4 susfs"
+for crdroid_soc in sm7550 sm8550 sm8650; do
+  resolve_susfs_settings "$crdroid_soc" 17.0
+  if [[ "$crdroid_soc" == sm8650 ]]; then
+    assert_eq "gki-android14-6.1" "$SUSFS_REF" "crDroid 13 OnePlus 12 GKI base"
+  else
+    assert_eq "gki-android14-5.15" "$SUSFS_REF" "crDroid 13 $crdroid_soc GKI base"
+  fi
+  [[ "$(zeromount_patch_sha256 "${SUSFS_REF#gki-}")" =~ ^[0-9a-f]{64}$ ]] \
+    || fail "crDroid 13 $crdroid_soc ZeroMount patch mapping"
+done
 assert_eq "2c774fdb4f0aaa743598c1bec787f6c935574ed1" \
   "$(sukisu_compatible_susfs_commit gki-android13-5.10)" "SukiSU Android 13 5.10 SUSFS pin"
 assert_eq "7af04b08f86a5f811cbea28805f96d52368e005f" \
@@ -359,7 +403,124 @@ ANYKERNEL_CACHE_FIXTURE_DIR="$(mktemp -d)"
 ANYKERNEL_PACKAGE_FIXTURE_DIR="$(mktemp -d)"
 ANYKERNEL_SLOT_FIXTURE_DIR="$(mktemp -d)"
 SUSFS_VENDOR_FIXTURE_DIR="$(mktemp -d)"
-trap 'rm -f "$ANYKERNEL_FIXTURE" "$UPDATE_BINARY_FIXTURE" "$APP_STAGING_FIXTURE" "$KPM_CONFIG_FIXTURE" "$KSUN_NOMOUNT_CONFIG_FIXTURE" "$ZEROMOUNT_CONFIG_FIXTURE" "$MODULE_CONFIG_FIXTURE" "$SCMVERSION_FIXTURE"; rm -rf "$KPM_VERIFY_FIXTURE" "$NOMOUNT_FIXTURE_DIR" "$ZEROMOUNT_FIXTURE_DIR" "$EXTRACT_CERT_FIXTURE_DIR" "$ANYKERNEL_CACHE_FIXTURE_DIR" "$ANYKERNEL_PACKAGE_FIXTURE_DIR" "$ANYKERNEL_SLOT_FIXTURE_DIR" "$SUSFS_VENDOR_FIXTURE_DIR"' EXIT
+RESOLVER_FIXTURE_DIR="$(mktemp -d)"
+trap 'rm -f "$ANYKERNEL_FIXTURE" "$UPDATE_BINARY_FIXTURE" "$APP_STAGING_FIXTURE" "$KPM_CONFIG_FIXTURE" "$KSUN_NOMOUNT_CONFIG_FIXTURE" "$ZEROMOUNT_CONFIG_FIXTURE" "$MODULE_CONFIG_FIXTURE" "$SCMVERSION_FIXTURE"; rm -rf "$KPM_VERIFY_FIXTURE" "$NOMOUNT_FIXTURE_DIR" "$ZEROMOUNT_FIXTURE_DIR" "$EXTRACT_CERT_FIXTURE_DIR" "$ANYKERNEL_CACHE_FIXTURE_DIR" "$ANYKERNEL_PACKAGE_FIXTURE_DIR" "$ANYKERNEL_SLOT_FIXTURE_DIR" "$SUSFS_VENDOR_FIXTURE_DIR" "$RESOLVER_FIXTURE_DIR"' EXIT
+
+# Exercise the real resolver with offline upstream refs, including a default
+# branch migration to 17.0 and an explicit selection of the older 16.0 branch.
+mkdir -p "$RESOLVER_FIXTURE_DIR/bin"
+cat > "$RESOLVER_FIXTURE_DIR/bin/git" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$1" != ls-remote ]]; then
+  exec "${RESOLVER_REAL_GIT:?}" "$@"
+fi
+if [[ "$2" == --symref ]]; then
+  printf 'ref: refs/heads/17.0\tHEAD\n'
+  exit 0
+fi
+commit=1111111111111111111111111111111111111111
+for argument in "$@"; do
+  if [[ "$argument" == *-modules.git ]]; then
+    commit=2222222222222222222222222222222222222222
+  fi
+done
+printf '%s\trefs/heads/%s\n' "$commit" "${@: -1}"
+EOF
+chmod +x "$RESOLVER_FIXTURE_DIR/bin/git"
+RESOLVER_REAL_GIT="$(command -v git)"
+for crdroid_profile in \
+  "SM7550 | OnePlus Nord CE4 | crDroid (recommended for crDroid)" \
+  "SM8550 | OnePlus 11 / 12R | crDroid" \
+  "SM8650 | OnePlus 12 | crDroid"; do
+  resolve_build_profile "$crdroid_profile"
+  for resolver_case in automatic-17 manual-17 manual-16; do
+    resolver_mode="I want to select the branch myself"
+    resolver_branch=17.0
+    expected_android=17
+    expected_clang=clang-r584948
+    if [[ "$resolver_case" == automatic-17 ]]; then
+      resolver_mode="Use the recommended branch automatically"
+      resolver_branch=""
+    elif [[ "$resolver_case" == manual-16 ]]; then
+      resolver_branch=16.0
+      expected_android=16
+      expected_clang=clang-r563880c
+    fi
+    expected_branch="${resolver_branch:-17.0}"
+    : > "$RESOLVER_FIXTURE_DIR/env"
+    : > "$RESOLVER_FIXTURE_DIR/output"
+    : > "$RESOLVER_FIXTURE_DIR/summary"
+    PATH="$RESOLVER_FIXTURE_DIR/bin:$PATH" \
+    RESOLVER_REAL_GIT="$RESOLVER_REAL_GIT" \
+    INPUT_BUILD_PROFILE="$crdroid_profile" \
+    INPUT_BRANCH_MODE="$resolver_mode" \
+    INPUT_KERNEL_BRANCH="$resolver_branch" \
+    INPUT_CLANG_CHOICE="Recommended (auto-select based on branch)" \
+    INPUT_ROOT_SOLUTION="No root changes" \
+    INPUT_BUILD_MODE="Patch/config validation only" \
+    INPUT_ROM_GKI_MODULE_COMPAT="Strict GKI module checks (default)" \
+    GITHUB_ENV="$RESOLVER_FIXTURE_DIR/env" \
+    GITHUB_OUTPUT="$RESOLVER_FIXTURE_DIR/output" \
+    GITHUB_STEP_SUMMARY="$RESOLVER_FIXTURE_DIR/summary" \
+      bash "$RESOLVER_SCRIPT" > "$RESOLVER_FIXTURE_DIR/log" \
+      || fail "$crdroid_profile $resolver_case resolver failed"
+    for expected_field in \
+      "PROFILE_ID=$PROFILE_ID" \
+      "KERNEL_REPO=https://github.com/crdroidandroid/android_kernel_oneplus_${UPSTREAM_SOC}.git" \
+      "MODULES_REPO=https://github.com/crdroidandroid/android_kernel_oneplus_${UPSTREAM_SOC}-modules.git" \
+      "KERNEL_BRANCH=$expected_branch" "MODULES_BRANCH=$expected_branch" \
+      "KERNEL_COMMIT=1111111111111111111111111111111111111111" \
+      "MODULES_COMMIT=2222222222222222222222222222222222222222" \
+      "CLANG_VERSION=$expected_clang" "SUPPORTED_ANDROID_VERSIONS=$expected_android" \
+      "KERNEL_MAKE_FLAGS=$KERNEL_MAKE_FLAGS"; do
+      grep -Fxq "$expected_field" "$RESOLVER_FIXTURE_DIR/env" \
+        || fail "$crdroid_profile $resolver_case missing $expected_field"
+    done
+    grep -Fxq "supported_android_versions=$expected_android" "$RESOLVER_FIXTURE_DIR/output" \
+      || fail "$crdroid_profile $resolver_case output Android version"
+    grep -Fq "Android package check: $expected_android" "$RESOLVER_FIXTURE_DIR/summary" \
+      || fail "$crdroid_profile $resolver_case summary Android version"
+    if grep -Eq '::warning::|disabled' "$RESOLVER_FIXTURE_DIR/log"; then
+      fail "$crdroid_profile $resolver_case emitted an unexpected warning"
+    fi
+  done
+done
+
+# SUSFS variants retain tested root revisions while other presets follow main.
+for suki_preset in \
+  'SukiSU Ultra + KPM (experimental)' \
+  'SukiSU Ultra + SUSFS + KPM (experimental)' \
+  'SukiSU Ultra + SUSFS + NoMount + KPM (experimental)' \
+  'SukiSU Ultra + SUSFS + ZeroMount + KPM (experimental)' \
+  'ReSukiSU' \
+  'ReSukiSU + susfs' \
+  'ReSukiSU + SUSFS + NoMount (experimental)' \
+  'ReSukiSU + SUSFS + ZeroMount (experimental)'; do
+  : > "$RESOLVER_FIXTURE_DIR/env"
+  PATH="$RESOLVER_FIXTURE_DIR/bin:$PATH" \
+  RESOLVER_REAL_GIT="$RESOLVER_REAL_GIT" \
+  INPUT_BUILD_PROFILE='SM8550 | OnePlus 11 / 12R | crDroid' \
+  INPUT_BRANCH_MODE='Use the recommended branch automatically' \
+  INPUT_CLANG_CHOICE='Recommended (auto-select based on branch)' \
+  INPUT_ROOT_SOLUTION="$suki_preset" \
+  INPUT_BUILD_MODE='Patch/config validation only' \
+  GITHUB_ENV="$RESOLVER_FIXTURE_DIR/env" \
+  GITHUB_OUTPUT="$RESOLVER_FIXTURE_DIR/output" \
+  GITHUB_STEP_SUMMARY="$RESOLVER_FIXTURE_DIR/summary" \
+    bash "$RESOLVER_SCRIPT" > "$RESOLVER_FIXTURE_DIR/log"
+  if [[ "$suki_preset" == ReSukiSU* && "${suki_preset,,}" == *susfs* ]]; then
+    grep -Fxq 'KSU_COMMIT=fa8311f632a215b5381ec644627c6198d1e8a13e' "$RESOLVER_FIXTURE_DIR/env" \
+      || fail "$suki_preset lost its compatible ReSukiSU pin"
+  elif [[ "$suki_preset" == *SUSFS* ]]; then
+    grep -Fxq 'KSU_COMMIT=7fbbb1f12e2410b69c8ebf958be84f165b8d0c93' "$RESOLVER_FIXTURE_DIR/env" \
+      || fail "$suki_preset lost its compatible SukiSU pin"
+  else
+    grep -Fxq 'KSU_REF=main' "$RESOLVER_FIXTURE_DIR/env" \
+      || fail "$suki_preset must track main"
+    grep -Fxq 'KSU_COMMIT=1111111111111111111111111111111111111111' "$RESOLVER_FIXTURE_DIR/env" \
+      || fail "$suki_preset must resolve the current upstream commit"
+  fi
+done
 
 # Exercise the real resolver with deterministic refs, including legacy inputs.
 (
@@ -394,11 +555,19 @@ trap 'rm -f "$ANYKERNEL_FIXTURE" "$UPDATE_BINARY_FIXTURE" "$APP_STAGING_FIXTURE"
         || fail "resolver did not normalize $root_name$suffix"
       grep -Fxq 'KSU_REPO=https://github.com/Baka-SU/BakaSU.git' "$BAKASU_RESOLVER_FIXTURE/env" \
         || fail "resolver did not use the canonical BakaSU repository"
-      grep -Fxq 'KSU_COMMIT=1111111111111111111111111111111111111111' "$BAKASU_RESOLVER_FIXTURE/env" \
-        || fail "resolver did not pin the BakaSU commit"
-      grep -Fxq 'ls-remote --exit-code https://github.com/Baka-SU/BakaSU.git refs/heads/main' \
-        "$BAKASU_RESOLVER_FIXTURE/git.log" \
-        || fail "resolver did not look up the BakaSU main branch"
+      if [[ "$KSU_TYPE" == *susfs* ]]; then
+        grep -Fxq 'KSU_COMMIT=fa8311f632a215b5381ec644627c6198d1e8a13e' "$BAKASU_RESOLVER_FIXTURE/env" \
+          || fail "resolver lost the compatible BakaSU SUSFS pin"
+        if grep -Fq 'https://github.com/Baka-SU/BakaSU.git' "$BAKASU_RESOLVER_FIXTURE/git.log"; then
+          fail "pinned BakaSU SUSFS presets must not resolve a moving branch"
+        fi
+      else
+        grep -Fxq 'KSU_COMMIT=1111111111111111111111111111111111111111' "$BAKASU_RESOLVER_FIXTURE/env" \
+          || fail "resolver did not resolve the BakaSU commit"
+        grep -Fxq 'ls-remote --exit-code https://github.com/Baka-SU/BakaSU.git refs/heads/main' \
+          "$BAKASU_RESOLVER_FIXTURE/git.log" \
+          || fail "resolver did not look up the BakaSU main branch"
+      fi
       if grep -Fq 'github.com/ReSukiSU/' "$BAKASU_RESOLVER_FIXTURE/git.log"; then
         fail "resolver still contacts the old ReSukiSU repository"
       fi
@@ -489,6 +658,49 @@ grep -Fq '#include <linux/susfs_def.h>' "$SUSFS_VENDOR_FIXTURE_DIR/fs/super.c" \
   || fail "SM8650 SUSFS recovery did not add the superblock header"
 grep -Fq 'extern bool susfs_is_current_ksu_domain(void);' "$SUSFS_VENDOR_FIXTURE_DIR/fs/super.c" \
   || fail "SM8650 SUSFS recovery did not add the superblock domain declaration"
+
+# Link the generated SELinux compatibility object with all combinations of
+# native symbols. Source inspection alone misses duplicate definitions at LTO.
+for native_symbols in neither fake running both; do
+  selinux_fixture="$SUSFS_VENDOR_FIXTURE_DIR/selinux-$native_symbols"
+  mkdir -p "$selinux_fixture/include/linux" "$selinux_fixture/compat"
+  printf '%s\n' '#define __read_mostly' '#define __maybe_static' > "$selinux_fixture/include/linux/cache.h"
+  echo '#include <stdbool.h>' > "$selinux_fixture/include/linux/types.h"
+  echo 'struct selinux_state { int initialized; };' > "$selinux_fixture/include/security.h"
+  cat > "$selinux_fixture/native.c" <<'EOF'
+#include <linux/cache.h>
+#include <linux/types.h>
+#include "security.h"
+EOF
+  if [[ "$native_symbols" == fake || "$native_symbols" == both ]]; then
+    echo '__maybe_static struct selinux_state fake_state;' >> "$selinux_fixture/native.c"
+  fi
+  if [[ "$native_symbols" == running || "$native_symbols" == both ]]; then
+    echo 'bool ksu_selinux_hide_running __read_mostly = false;' >> "$selinux_fixture/native.c"
+  fi
+  # Patch backups and stale generated files must not count as native symbols.
+  printf '%s\n' 'struct selinux_state fake_state;' 'bool ksu_selinux_hide_running;' \
+    > "$selinux_fixture/native.c.orig"
+  cp "$selinux_fixture/native.c.orig" "$selinux_fixture/compat/susfs_selinux_hide_compat.c"
+  echo 'kernelsu-objs += compat/susfs_selinux_hide_compat.o' > "$selinux_fixture/Kbuild"
+  patch_susfs_selinux_hide_compat "$selinux_fixture" >/dev/null
+  patch_susfs_selinux_hide_compat "$selinux_fixture" >/dev/null
+  cc -DCONFIG_KSU_SUSFS -fno-common -I "$selinux_fixture/include" \
+    -c "$selinux_fixture/native.c" -o "$selinux_fixture/native.o"
+  if [[ "$native_symbols" == both ]]; then
+    test ! -f "$selinux_fixture/compat/susfs_selinux_hide_compat.c" \
+      || fail "native SELinux symbols left a stale compatibility object"
+    test ! -s "$selinux_fixture/Kbuild" \
+      || fail "native SELinux symbols left stale Kbuild wiring"
+  else
+    assert_eq 1 "$(grep -c 'kernelsu-objs += compat/susfs_selinux_hide_compat.o' "$selinux_fixture/Kbuild")" \
+      "SELinux compatibility Kbuild idempotence ($native_symbols)"
+    cc -DCONFIG_KSU_SUSFS -fno-common -I "$selinux_fixture/include" \
+      -c "$selinux_fixture/compat/susfs_selinux_hide_compat.c" -o "$selinux_fixture/compat.o"
+    cc -r "$selinux_fixture/native.o" "$selinux_fixture/compat.o" -o "$selinux_fixture/linked.o" \
+      || fail "SELinux compatibility duplicates native symbols ($native_symbols)"
+  fi
+done
 
 ANYKERNEL_TEMPLATE_FIXTURE="$(mktemp)"
 printf '%s\n' placeholder > "$ANYKERNEL_TEMPLATE_FIXTURE"
@@ -591,6 +803,18 @@ assert_eq "$APP_STAGING_HASH" \
   "$(sha256sum "$APP_STAGING_FIXTURE" | cut -d' ' -f1)" \
   "AnyKernel app-flasher staging idempotence"
 
+(
+  cd "$EXTRACT_CERT_FIXTURE_DIR"
+  if detect_extract_cert_source >/dev/null; then
+    fail "certificate source detection accepted a missing source"
+  fi
+  mkdir -p scripts certs
+  touch scripts/extract-cert.c
+  assert_eq scripts/extract-cert.c "$(detect_extract_cert_source)" "5.15 certificate source layout"
+  touch certs/extract-cert.c
+  assert_eq certs/extract-cert.c "$(detect_extract_cert_source)" "6.1 certificate source layout"
+)
+
 cat > "$EXTRACT_CERT_FIXTURE_DIR/extract-cert.c" <<'EOF'
 #include <openssl/engine.h>
 #ifdef USE_PKCS11_ENGINE
@@ -678,12 +902,14 @@ grep -q '^CONFIG_KALLSYMS_ALL=y$' "$KPM_CONFIG_FIXTURE" || fail "KPM kallsyms-al
 grep -q '^CONFIG_KSU_SUSFS=y$' "$KPM_CONFIG_FIXTURE" || fail "combined preset SUSFS config"
 grep -q '^CONFIG_KSU_SUSFS_SUS_MAP=y$' "$KPM_CONFIG_FIXTURE" || fail "combined preset SUSFS map config"
 grep -q '^CONFIG_KSU_SUSFS_OPEN_REDIRECT=y$' "$KPM_CONFIG_FIXTURE" || fail "combined preset SUSFS redirect config"
+grep -q '^CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y$' "$KPM_CONFIG_FIXTURE" || fail "combined preset SUSFS symbol hiding config"
 grep -q '^CONFIG_KEYS=y$' "$KPM_CONFIG_FIXTURE" || fail "combined preset NoMount key config"
 grep -q '^CONFIG_NOMOUNT=y$' "$KPM_CONFIG_FIXTURE" || fail "combined preset NoMount config"
 
 KSU_TYPE="KernelSU-Next-with-susfs-nomount"
 apply_variant_configs "$KSUN_NOMOUNT_CONFIG_FIXTURE"
 grep -q '^CONFIG_KSU_SUSFS=y$' "$KSUN_NOMOUNT_CONFIG_FIXTURE" || fail "KernelSU-Next NoMount SUSFS config"
+grep -q '^# CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS is not set$' "$KSUN_NOMOUNT_CONFIG_FIXTURE" || fail "KernelSU-Next symbol hiding must stay disabled"
 grep -q '^CONFIG_KEYS=y$' "$KSUN_NOMOUNT_CONFIG_FIXTURE" || fail "KernelSU-Next NoMount key config"
 grep -q '^CONFIG_NOMOUNT=y$' "$KSUN_NOMOUNT_CONFIG_FIXTURE" || fail "KernelSU-Next NoMount config"
 if grep -q '^CONFIG_ZEROMOUNT=y$' "$KSUN_NOMOUNT_CONFIG_FIXTURE"; then
@@ -694,6 +920,7 @@ KSU_TYPE="SukiSU-Ultra-with-susfs-zeromount-KPM"
 apply_variant_configs "$ZEROMOUNT_CONFIG_FIXTURE"
 grep -q '^CONFIG_ZEROMOUNT=y$' "$ZEROMOUNT_CONFIG_FIXTURE" || fail "combined preset ZeroMount config"
 grep -q '^CONFIG_KSU_SUSFS=y$' "$ZEROMOUNT_CONFIG_FIXTURE" || fail "ZeroMount preset SUSFS config"
+grep -q '^CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y$' "$ZEROMOUNT_CONFIG_FIXTURE" || fail "ZeroMount preset SUSFS symbol hiding config"
 grep -q '^CONFIG_KPM=y$' "$ZEROMOUNT_CONFIG_FIXTURE" || fail "ZeroMount preset KPM config"
 if grep -q '^CONFIG_NOMOUNT=y$' "$ZEROMOUNT_CONFIG_FIXTURE"; then
   fail "ZeroMount preset must not enable NoMount"
@@ -727,6 +954,23 @@ apply_variant_configs "$MODULE_CONFIG_FIXTURE"
 assert_eq "$MODULE_ABI_SNAPSHOT" \
   "$(grep -E "$MODULE_ABI_PATTERN" "$MODULE_CONFIG_FIXTURE")" \
   "root presets must preserve vendor ABI-sensitive configs"
+printf '%s\n' 'CONFIG_MODULE_SIG=y' '# CONFIG_MODULE_SIG_FORCE is not set' \
+  'CONFIG_MODULE_SIG_PROTECT=y' >> "$MODULE_CONFIG_FIXTURE"
+ROM_GKI_MODULE_COMPAT=0
+MODULE_CONFIG_HASH="$(sha256sum "$MODULE_CONFIG_FIXTURE" | cut -d' ' -f1)"
+apply_rom_gki_module_compat_config "$MODULE_CONFIG_FIXTURE"
+assert_eq "$MODULE_CONFIG_HASH" \
+  "$(sha256sum "$MODULE_CONFIG_FIXTURE" | cut -d' ' -f1)" \
+  "strict mode must preserve GKI protection"
+ROM_GKI_MODULE_COMPAT=1
+apply_rom_gki_module_compat_config "$MODULE_CONFIG_FIXTURE"
+grep -Fqx '# CONFIG_MODULE_SIG_PROTECT is not set' "$MODULE_CONFIG_FIXTURE" \
+  || fail "ROM compatibility mode did not disable GKI module protection"
+grep -Fqx 'CONFIG_MODULE_SIG=y' "$MODULE_CONFIG_FIXTURE" \
+  || fail "ROM compatibility mode disabled module signature verification"
+grep -Fqx '# CONFIG_MODULE_SIG_FORCE is not set' "$MODULE_CONFIG_FIXTURE" \
+  || fail "ROM compatibility mode changed required module signatures"
+ROM_GKI_MODULE_COMPAT=0
 grep -Fq 'write_kernel_scmversion "$KERNEL_COMMIT"' "$COMPILE_SCRIPT" \
   || fail "full builds do not pin the ROM-compatible kernel release suffix"
 if grep -Fq 'touch .scmversion' "$COMPILE_SCRIPT"; then
@@ -791,6 +1035,7 @@ mkdir -p \
   "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source/tools" \
   "$ANYKERNEL_PACKAGE_FIXTURE_DIR/magisk-apk/lib/arm64-v8a" \
   "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/sm8550/out/arch/arm64/boot" \
+  "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/sm8650/out/arch/arm64/boot" \
   "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/sm8550/SukiSU-Ultra/userspace/ksud/bin/aarch64" \
   "$ANYKERNEL_PACKAGE_FIXTURE_DIR/bin"
 printf '%s\n' \
@@ -807,6 +1052,7 @@ printf '%s\n' \
   > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source/anykernel.sh"
 printf '%s\n' \
   '[ "$AKHOME" ] || export AKHOME=$POSTINSTALL/tmp/anykernel;' \
+  'ui_print " " "AnyKernel3 by osm0sis @ xda-developers" " ";' \
   '  if [ ! "$match" ]; then' \
   '    abort " " "Unsupported device. Aborting...";' \
   '  fi;' \
@@ -834,11 +1080,13 @@ git clone -q "$ANYKERNEL_PACKAGE_FIXTURE_DIR/source" "$ANYKERNEL_PACKAGE_FIXTURE
 printf '%s\n' 'kernel.string=dirty-cache' > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/anykernel.sh"
 printf '%s\n' stale > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/Image"
 printf '%s\n' image > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/sm8550/out/arch/arm64/boot/Image"
+printf '%s\n' image > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/sm8650/out/arch/arm64/boot/Image"
 printf '%s\n' sukisu-arm64-busybox > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/sm8550/SukiSU-Ultra/userspace/ksud/bin/aarch64/busybox"
 printf '%s\n' magisk-arm64-magiskboot > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/magisk-apk/lib/arm64-v8a/libmagiskboot.so"
+printf '%s\n' magisk-arm64-busybox > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/magisk-apk/lib/arm64-v8a/libbusybox.so"
 (
   cd "$ANYKERNEL_PACKAGE_FIXTURE_DIR/magisk-apk"
-  zip -q "$ANYKERNEL_PACKAGE_FIXTURE_DIR/Magisk.apk" lib/arm64-v8a/libmagiskboot.so
+  zip -q "$ANYKERNEL_PACKAGE_FIXTURE_DIR/Magisk.apk" lib/arm64-v8a/libmagiskboot.so lib/arm64-v8a/libbusybox.so
 )
 cat > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/bin/jq" <<'EOF'
 #!/usr/bin/env bash
@@ -896,6 +1144,9 @@ for package_timestamp in 20260101_000000 20260101_000001; do
     || fail "AnyKernel packaging did not produce the flashable archive"
   test -s "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/release-assets/SHA256SUMS" \
     || fail "AnyKernel packaging did not produce checksums"
+  grep -Fxq 'ui_print " " "Kernel developer: AzusaMyo @ xda-developers" " ";' \
+    "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/META-INF/com/google/android/update-binary" \
+    || fail "AnyKernel package does not show the requested kernel developer"
   grep -Fxq 'split_boot;' \
     "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/anykernel.sh" \
     || fail "AnyKernel package does not split ramdiskless boot images"
@@ -955,13 +1206,66 @@ for package_timestamp in 20260101_000000 20260101_000001; do
     "AnyKernel preflight diagnostics idempotence"
 done
 
+(
+  cd "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work"
+  PATH="$ANYKERNEL_PACKAGE_FIXTURE_DIR/bin:$PATH" \
+  SOC=sm8650 \
+  PROFILE_ID=sm8650-oneplus12-crdroid \
+  TARGET_NAME='OnePlus 12' \
+  DEVICE_CODENAMES=waffle \
+  DEVICE_NAMES='waffle OP5929L1 OP595DL1' \
+  SUPPORTED_ANDROID_VERSIONS=17 \
+  SOURCE_NAME=crDroid \
+  KERNEL_BRANCH=17.0 \
+  MODULES_BRANCH=17.0 \
+  KERNEL_COMMIT=1111111111111111111111111111111111111111 \
+  MODULES_COMMIT=2222222222222222222222222222222222222222 \
+  CLANG_VERSION=test-clang \
+  KSU_TYPE=KernelSU-Next-with-susfs \
+  ROM_GKI_MODULE_COMPAT=1 \
+  BUILD_TIMESTAMP=20260101_000002 \
+  GITHUB_WORKSPACE="$ANYKERNEL_PACKAGE_FIXTURE_DIR/work" \
+  GITHUB_ENV="$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/github-env" \
+  GITHUB_OUTPUT="$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/github-output" \
+  MAGISK_APK_PATH="$ANYKERNEL_PACKAGE_FIXTURE_DIR/Magisk.apk" \
+  MAGISK_APK_SHA256="$(sha256sum "$ANYKERNEL_PACKAGE_FIXTURE_DIR/Magisk.apk" | cut -d' ' -f1)" \
+  MAGISKBOOT_ARM64_SHA256="$(sha256sum "$ANYKERNEL_PACKAGE_FIXTURE_DIR/magisk-apk/lib/arm64-v8a/libmagiskboot.so" | cut -d' ' -f1)" \
+  MAGISK_BUSYBOX_ARM64_SHA256="$(sha256sum "$ANYKERNEL_PACKAGE_FIXTURE_DIR/magisk-apk/lib/arm64-v8a/libbusybox.so" | cut -d' ' -f1)" \
+  ANYKERNEL_REPO="$ANYKERNEL_PACKAGE_FIXTURE_DIR/source" \
+  ANYKERNEL_COMMIT="$ANYKERNEL_PACKAGE_COMMIT" \
+  bash "$ANYKERNEL_PACKAGE_SCRIPT" >/dev/null
+)
+test -s "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/release-assets/sm8650-oneplus12-crdroid_KernelSU-Next-with-susfs_111111111111_20260101_000002_rom-gki-compat.zip" \
+  || fail "OnePlus 12 package with arm64 tools was not produced"
+grep -Fxq 'supported.versions=17' "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/anykernel.sh" \
+  || fail "crDroid 13 OnePlus 12 package does not enforce Android 17"
+assert_eq "magisk-arm64-magiskboot" \
+  "$(cat "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/tools/magiskboot")" \
+  "OnePlus 12 MagiskBoot replacement"
+assert_eq "magisk-arm64-busybox" \
+  "$(cat "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/tools/busybox")" \
+  "OnePlus 12 BusyBox replacement"
+grep -Fq 'Bundled MagiskBoot ABI: arm64' \
+  "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/META-INF/com/google/android/update-binary" \
+  || fail "OnePlus 12 package does not report arm64 MagiskBoot"
+grep -Fq 'Removing incompatible app-injected mkbootfs' \
+  "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/META-INF/com/google/android/update-binary" \
+  || fail "OnePlus 12 package does not remove an injected 32-bit mkbootfs"
+
 for i in "${!profiles[@]}"; do
   resolve_build_profile "${profiles[$i]}"
+  package_android=16
+  if [[ "$KERNEL_SOURCE" == crdroidandroid ]]; then
+    infer_android_versions 17.0
+    package_android="$SUPPORTED_ANDROID_VERSIONS"
+  fi
   configure_anykernel_properties \
     "$ANYKERNEL_FIXTURE" \
     "${PROFILE_ID} test kernel" \
     "$DEVICE_NAMES" \
-    "16"
+    "$package_android"
+  grep -Fxq "supported.versions=$package_android" "$ANYKERNEL_FIXTURE" \
+    || fail "${profiles[$i]} did not enforce Android $package_android"
   for device_name in $DEVICE_NAMES; do
     grep -q "^device.name[1-7]=${device_name}$" "$ANYKERNEL_FIXTURE" \
       || fail "${profiles[$i]} did not inject device ID: $device_name"
@@ -985,5 +1289,75 @@ insert_line_before_last_match \
   'source "fs/nomount/Kconfig"'
 assert_eq "4" "$(grep -nF 'source "fs/nomount/Kconfig"' "$NOMOUNT_FIXTURE_DIR/Kconfig" | cut -d: -f1)" \
   "NoMount Kconfig insertion"
+
+# Exercise NoMount's literal and composed versions through the real installer,
+# including shallow history and both kernel source layouts.
+NOMOUNT_SOURCE_FIXTURE="$NOMOUNT_FIXTURE_DIR/source"
+mkdir -p "$NOMOUNT_SOURCE_FIXTURE/kernel/src"
+printf '%s\n' '#define NOMOUNT_VERSION "20"' > "$NOMOUNT_SOURCE_FIXTURE/kernel/src/nomount.h"
+assert_eq "20" "$(detect_nomount_version "$NOMOUNT_SOURCE_FIXTURE/kernel/src")" \
+  "legacy NoMount literal version"
+printf '%s\n' 'obj-$(CONFIG_NOMOUNT) += nomount.o' > "$NOMOUNT_SOURCE_FIXTURE/kernel/src/Makefile"
+printf '%s\n' 'config NOMOUNT' > "$NOMOUNT_SOURCE_FIXTURE/kernel/src/Kconfig"
+printf '%s\n' 'void nomount_init(void) {}' > "$NOMOUNT_SOURCE_FIXTURE/kernel/src/nomount.c"
+git -C "$NOMOUNT_SOURCE_FIXTURE" init -q
+git -C "$NOMOUNT_SOURCE_FIXTURE" config user.name fixture
+git -C "$NOMOUNT_SOURCE_FIXTURE" config user.email fixture@example.invalid
+git -C "$NOMOUNT_SOURCE_FIXTURE" add .
+git -C "$NOMOUNT_SOURCE_FIXTURE" commit -qm legacy
+NOMOUNT_LEGACY_COMMIT="$(git -C "$NOMOUNT_SOURCE_FIXTURE" rev-parse HEAD)"
+cat > "$NOMOUNT_SOURCE_FIXTURE/kernel/src/nomount.h" <<'EOF'
+#define NOMOUNT_BASE_VERSION "21"
+#ifdef NOMOUNT_COMMIT_COUNT
+    #define NOMOUNT_VERSION NOMOUNT_BASE_VERSION "-" NOMOUNT_COMMIT_COUNT
+#else
+    #define NOMOUNT_VERSION NOMOUNT_BASE_VERSION
+#endif
+EOF
+cat > "$NOMOUNT_SOURCE_FIXTURE/kernel/src/Makefile" <<'EOF'
+NM_REAL_PATH := $(shell readlink -f $(src))
+NOMOUNT_COMMITS := $(shell git -C $(NM_REAL_PATH) rev-list --count HEAD 2>/dev/null)
+ifneq ($(NOMOUNT_COMMITS),)
+ccflags-y += -DNOMOUNT_COMMIT_COUNT=\"$(NOMOUNT_COMMITS)\"
+endif
+obj-$(CONFIG_NOMOUNT) += nomount.o
+EOF
+git -C "$NOMOUNT_SOURCE_FIXTURE" add .
+git -C "$NOMOUNT_SOURCE_FIXTURE" commit -qm composed
+NOMOUNT_COMPOSED_COMMIT="$(git -C "$NOMOUNT_SOURCE_FIXTURE" rev-parse HEAD)"
+assert_eq "21-2" "$(detect_nomount_version "$NOMOUNT_SOURCE_FIXTURE/kernel/src")" \
+  "NoMount version includes the source history count"
+for nomount_layout in fs common/fs; do
+  for nomount_revision in legacy composed; do
+    nomount_work="$NOMOUNT_FIXTURE_DIR/$nomount_layout-$nomount_revision"
+    mkdir -p "$nomount_work/$nomount_layout"
+    : > "$nomount_work/$nomount_layout/Makefile"
+    printf '%s\n' 'menu "Filesystems"' endmenu > "$nomount_work/$nomount_layout/Kconfig"
+    nomount_commit="$NOMOUNT_COMPOSED_COMMIT"
+    expected_nomount_version=21-1
+    if [[ "$nomount_revision" == legacy ]]; then
+      nomount_commit="$NOMOUNT_LEGACY_COMMIT"
+      expected_nomount_version=20
+    fi
+    (
+      cd "$nomount_work"
+      export GITHUB_ENV="$nomount_work/github-env"
+      install_nomount "$NOMOUNT_SOURCE_FIXTURE" master "$nomount_commit" >/dev/null
+      assert_eq "$expected_nomount_version" "$NOMOUNT_VERSION" \
+        "$nomount_layout $nomount_revision integrated version"
+      verify_nomount_source_integration
+      grep -Fxq "nomount_version=$expected_nomount_version" nomount-source-proof.txt \
+        || fail "NoMount proof does not report the compiled version"
+      if (NOMOUNT_VERSION=unexpected; verify_nomount_source_integration) >/dev/null 2>&1; then
+        fail "NoMount verification accepted a mismatched version"
+      fi
+    )
+  done
+done
+printf '%s\n' '#define NOMOUNT_VERSION UNKNOWN_VERSION_EXPRESSION' \
+  > "$NOMOUNT_SOURCE_FIXTURE/kernel/src/nomount.h"
+if detect_nomount_version "$NOMOUNT_SOURCE_FIXTURE/kernel/src" >/dev/null 2>&1; then
+  fail "unknown NoMount version expressions must fail closed"
+fi
 
 echo "PASS: profiles, source compatibility, KPM, SUSFS floor, NoMount/ZeroMount integration, and AnyKernel protection"

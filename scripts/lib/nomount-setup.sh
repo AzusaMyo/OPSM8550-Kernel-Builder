@@ -4,6 +4,33 @@
 # Depends on lib/git-helpers.sh and lib/kernel-helpers.sh.
 #
 
+detect_nomount_version() {
+  local source_dir="$1"
+  local header="${source_dir}/nomount.h"
+  local version
+  local commit_count
+
+  # Older releases use a literal; v21 composes the base version with the
+  # checkout's commit count passed by its Makefile. Match the compiled value,
+  # including the count from our shallow, exact-commit checkout.
+  version="$(sed -nE 's/^[[:space:]]*#define[[:space:]]+NOMOUNT_VERSION[[:space:]]+"([^"]+)"[[:space:]]*$/\1/p' "$header" | head -n 1)"
+  if [[ -n "$version" ]]; then
+    printf '%s\n' "$version"
+    return 0
+  fi
+
+  version="$(sed -nE 's/^[[:space:]]*#define[[:space:]]+NOMOUNT_BASE_VERSION[[:space:]]+"([^"]+)"[[:space:]]*$/\1/p' "$header" | head -n 1)"
+  [[ -n "$version" ]] || return 1
+  grep -Eq '^[[:space:]]*#define[[:space:]]+NOMOUNT_VERSION[[:space:]]+NOMOUNT_BASE_VERSION[[:space:]]*$' "$header" || return 1
+  if grep -Eq '^[[:space:]]*#define[[:space:]]+NOMOUNT_VERSION[[:space:]]+NOMOUNT_BASE_VERSION[[:space:]]+"-"[[:space:]]+NOMOUNT_COMMIT_COUNT[[:space:]]*$' "$header"; then
+    grep -Fq 'ccflags-y += -DNOMOUNT_COMMIT_COUNT=\"$(NOMOUNT_COMMITS)\"' "${source_dir}/Makefile" || return 1
+    commit_count="$(git -C "$source_dir" rev-list --count HEAD)" || return 1
+    [[ "$commit_count" =~ ^[0-9]+$ ]] || return 1
+    version="${version}-${commit_count}"
+  fi
+  printf '%s\n' "$version"
+}
+
 insert_line_before_last_match() {
   local file="$1"
   local match_line="$2"
@@ -71,8 +98,7 @@ install_nomount() {
     exit 1
   }
 
-  version="$(sed -nE 's/^#define NOMOUNT_VERSION "([^"]+)"/\1/p' "$repo_dir/kernel/src/nomount.h" | head -n 1)"
-  if [[ -z "$version" ]]; then
+  if ! version="$(detect_nomount_version "$repo_dir/kernel/src")"; then
     echo "::error::Could not detect the integrated NoMount version."
     exit 1
   fi

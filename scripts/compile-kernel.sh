@@ -32,6 +32,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 : "${KERNEL_BRANCH:?}"
 : "${KERNEL_COMMIT:?}"
 : "${BUILD_MODE:?}"
+: "${ROM_GKI_MODULE_COMPAT:=0}"
 
 BUILD_STARTED_AT="$(date +%s)"
 CONFIG_SECONDS=0
@@ -44,6 +45,10 @@ publish_performance_summary() {
   local elapsed
 
   trap - EXIT
+  if [[ -n "${BUILD_RESOURCE_MONITOR_PID:-}" ]]; then
+    kill "$BUILD_RESOURCE_MONITOR_PID" 2>/dev/null || true
+    wait "$BUILD_RESOURCE_MONITOR_PID" 2>/dev/null || true
+  fi
   finished_at="$(date +%s)"
   elapsed=$((finished_at - BUILD_STARTED_AT))
 
@@ -67,6 +72,13 @@ publish_performance_summary() {
 trap publish_performance_summary EXIT
 
 CLANG_ROOT="${GITHUB_WORKSPACE}/toolchains/${CLANG_VERSION}/bin"
+if [[ "$BUILD_MODE" == 'Patch/config validation only' && ! -x "${CLANG_ROOT}/clang" ]]; then
+  # Validation workflows install the distribution LLVM toolchain instead of
+  # downloading AOSP Clang. Keep symbol verification on that same toolchain.
+  CLANG_ROOT="$(dirname "$(command -v clang)")"
+  test -x "${CLANG_ROOT}/ld.lld"
+  test -x "${CLANG_ROOT}/llvm-nm"
+fi
 export PATH="${CLANG_ROOT}:${PATH}"
 export ARCH=arm64
 export SUBARCH=arm64
@@ -118,7 +130,11 @@ ccache --zero-stats || true
 CONFIG_STARTED_AT="$(date +%s)"
 BUILD_PHASE="source integration"
 
-repair_extract_cert_key_pass_guard certs/extract-cert.c
+EXTRACT_CERT_SOURCE="$(detect_extract_cert_source)" || {
+  echo '::error::Kernel certificate host-tool source was not found.'
+  exit 1
+}
+repair_extract_cert_key_pass_guard "$EXTRACT_CERT_SOURCE"
 install_ksu_variant "${KSU_TYPE}"
 
 if [[ "$KSU_TYPE" == *KPM* ]]; then
@@ -162,13 +178,24 @@ read -r -a ACTIVE_CONFIG_ARRAY <<< "$ACTIVE_BUILD_CONFIGS"
 
 BUILD_PHASE="config generation"
 apply_variant_configs arch/arm64/configs/gki_defconfig
+apply_rom_gki_module_compat_config arch/arm64/configs/gki_defconfig
 make "${MAKE_ARGS[@]}" gki_defconfig "${ACTIVE_CONFIG_ARRAY[@]}"
 apply_variant_configs out/.config
+apply_rom_gki_module_compat_config out/.config
 make "${MAKE_ARGS[@]}" olddefconfig
 
 require_config_enabled  out/.config CONFIG_MODULES
 require_config_enabled  out/.config CONFIG_MODULE_UNLOAD
 require_config_enabled  out/.config CONFIG_MODVERSIONS
+if [[ "$ROM_GKI_MODULE_COMPAT" == 1 ]]; then
+  require_config_enabled out/.config CONFIG_MODULE_SIG
+  require_config_disabled out/.config CONFIG_MODULE_SIG_FORCE
+  require_config_disabled out/.config CONFIG_MODULE_SIG_PROTECT
+  grep -Fqx '# CONFIG_MODULE_SIG_PROTECT is not set' out/.config || {
+    echo "::error::ROM GKI module compatibility did not survive olddefconfig."
+    exit 1
+  }
+fi
 
 if [[ "$KSU_TYPE" != "None" ]]; then
   require_config_enabled out/.config CONFIG_KSU
@@ -178,7 +205,11 @@ if [[ "$KSU_TYPE" == *susfs* ]]; then
   require_config_enabled  out/.config CONFIG_KSU_SUSFS_SUS_MAP
   require_config_enabled  out/.config CONFIG_KSU_SUSFS_OPEN_REDIRECT
   require_config_disabled out/.config CONFIG_KSU_MANUAL_HOOK
-  require_config_disabled out/.config CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS
+  if [[ "$KSU_TYPE" == SukiSU-Ultra-with-susfs* ]]; then
+    require_config_enabled out/.config CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS
+  else
+    require_config_disabled out/.config CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS
+  fi
 fi
 if [[ "$KSU_TYPE" == *nomount* ]]; then
   require_config_enabled out/.config CONFIG_KEYS
@@ -198,7 +229,12 @@ CONFIG_SECONDS=$(($(date +%s) - CONFIG_STARTED_AT))
 if [[ "$BUILD_MODE" == "Patch/config validation only" ]]; then
   BUILD_PHASE="host-tool smoke compile"
   COMPILE_STARTED_AT="$(date +%s)"
-  if ! make "${MAKE_ARGS[@]}" certs/extract-cert; then
+  # Use the owning Kbuild target so extract-cert is compiled with HOSTCC and
+  # linked with libcrypto, rather than treated as an arm64 kernel object.
+  EXTRACT_CERT_TARGET='certs/'
+  [[ "$EXTRACT_CERT_SOURCE" != scripts/* ]] || EXTRACT_CERT_TARGET=scripts
+  if ! make "${MAKE_ARGS[@]}" "$EXTRACT_CERT_TARGET" || \
+     [[ ! -x "out/${EXTRACT_CERT_SOURCE%.c}" ]]; then
     COMPILE_SECONDS=$(($(date +%s) - COMPILE_STARTED_AT))
     echo "::error::Kernel certificate host-tool smoke compile failed."
     exit 1
@@ -212,7 +248,7 @@ if [[ "$BUILD_MODE" == "Patch/config validation only" ]]; then
       fs/namespace.o
       fs/proc/task_mmu.o
       kernel/reboot.o
-      "${KSU_DRIVER_DIR}/kernelsu/kernelsu.o"
+      "${KSU_DRIVER_DIR}/kernelsu/"
     )
   fi
   if [[ "$KSU_TYPE" == *nomount* ]]; then
@@ -232,18 +268,22 @@ if [[ "$BUILD_MODE" == "Patch/config validation only" ]]; then
   fi
   if [[ "$KSU_TYPE" == *KPM* ]]; then
     if [[ "$KSU_TYPE" != *susfs* ]]; then
-      SMOKE_TARGETS+=("${KSU_DRIVER_DIR}/kernelsu/kernelsu.o")
+      SMOKE_TARGETS+=("${KSU_DRIVER_DIR}/kernelsu/")
     fi
-    SMOKE_TARGETS+=(
-      "${KSU_DRIVER_DIR}/kernelsu/kpm/compact.o"
-      "${KSU_DRIVER_DIR}/kernelsu/kpm/kpm.o"
-      "${KSU_DRIVER_DIR}/kernelsu/kpm/super_access.o"
-    )
+    # Building the KernelSU directory includes all CONFIG_KPM objects as well
+    # as its SUSFS compatibility sources and symbol resolver.
   fi
 
   if [[ "${#SMOKE_TARGETS[@]}" -gt 0 ]]; then
     BUILD_PHASE="integration object smoke compile"
     COMPILE_STARTED_AT="$(date +%s)"
+    # A partial driver build does not visit the directories that generate
+    # compile.h and the SELinux flask/permission headers used by KernelSU.
+    if ! make -j"$(nproc)" "${MAKE_ARGS[@]}" init/ security/selinux/; then
+      COMPILE_SECONDS=$((COMPILE_SECONDS + $(date +%s) - COMPILE_STARTED_AT))
+      echo '::error::KernelSU generated-header preparation failed.'
+      exit 1
+    fi
     if ! make -j"$(nproc)" "${MAKE_ARGS[@]}" "${SMOKE_TARGETS[@]}" 2>&1 | tee integration-smoke.log; then
       COMPILE_SECONDS=$((COMPILE_SECONDS + $(date +%s) - COMPILE_STARTED_AT))
       echo "::error::SUSFS/NoMount/ZeroMount/KPM integration object smoke compile failed."
@@ -271,6 +311,18 @@ fi
 
 BUILD_PHASE="kernel compilation"
 COMPILE_STARTED_AT="$(date +%s)"
+(
+  while true; do
+    {
+      echo "==== BUILD RESOURCES $(date -u +'%Y-%m-%d %H:%M:%S UTC') ===="
+      free -h
+      df -h .
+      ps -C ld.lld -o pid,rss,vsz,pcpu,etime,comm || true
+    } | tee -a build-resources.log
+    sleep 30
+  done
+) &
+BUILD_RESOURCE_MONITOR_PID=$!
 if ! make -j"$(nproc)" "${MAKE_ARGS[@]}" Image 2>&1 | tee build.log; then
   COMPILE_SECONDS=$(($(date +%s) - COMPILE_STARTED_AT))
   ccache --show-stats || true
@@ -280,6 +332,9 @@ if ! make -j"$(nproc)" "${MAKE_ARGS[@]}" Image 2>&1 | tee build.log; then
   tail -n 200 build.log || true
   exit 1
 fi
+kill "$BUILD_RESOURCE_MONITOR_PID" 2>/dev/null || true
+wait "$BUILD_RESOURCE_MONITOR_PID" 2>/dev/null || true
+BUILD_RESOURCE_MONITOR_PID=''
 COMPILE_SECONDS=$(($(date +%s) - COMPILE_STARTED_AT))
 
 BUILD_PHASE="post-build verification"
