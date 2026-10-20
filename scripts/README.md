@@ -49,6 +49,9 @@ Shell implementation used by the GitHub Actions workflows.
   including an LTO-aware `llvm-nm` check of the compiled KPM resolver, plus
   dedicated KPM, SUSFS, NoMount, and ZeroMount proofs. Full builds also verify
   that the final `Image` release suffix identifies the pinned kernel commit.
+  SUSFS validation also checks exec/SELinux object references against global
+  KernelSU/SUSFS definitions with the active toolchain's `llvm-nm`, so missing
+  hook symbols fail before a full kernel link.
 
 ## Tests
 

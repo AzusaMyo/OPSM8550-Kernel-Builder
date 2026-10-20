@@ -261,6 +261,46 @@ verify_susfs_binary_presence() {
   } | tee susfs-proof.txt
 }
 
+# A partial Kbuild succeeds with unresolved hooks. Compare the kernel callers
+# with global driver definitions so validation catches ABI drift before Image's
+# final link, including LLVM bitcode objects when LTO is enabled.
+verify_susfs_hook_linkage() {
+  local llvm_nm="${CLANG_ROOT:?}/llvm-nm"
+  local driver_objects="out/${KSU_DRIVER_DIR:?}/kernelsu"
+  local object_file definitions required missing
+  local caller_objects=(out/fs/exec.o out/security/selinux/hooks.o out/security/selinux/selinuxfs.o)
+  local provider_objects=(out/fs/susfs.o)
+  local ksu_objects=()
+
+  [[ -x "$llvm_nm" && -d "$driver_objects" ]] || {
+    echo "::error::SUSFS hook linkage requires llvm-nm and compiled KernelSU objects."
+    return 1
+  }
+  mapfile -d '' -t ksu_objects < <(find "$driver_objects" -type f -name '*.o' -print0)
+  [[ "${#ksu_objects[@]}" -gt 0 ]] || {
+    echo "::error::No KernelSU objects were compiled for SUSFS hook linkage verification."
+    return 1
+  }
+  provider_objects+=("${ksu_objects[@]}")
+  for object_file in "${caller_objects[@]}" "${provider_objects[@]}"; do
+    [[ -s "$object_file" ]] || {
+      echo "::error::SUSFS hook linkage object is missing: $object_file"
+      return 1
+    }
+  done
+  definitions="$("$llvm_nm" --extern-only --defined-only --format=posix "${provider_objects[@]}" \
+    | awk 'NF >= 2 {print $1}' | sort -u)" || return 1
+  required="$("$llvm_nm" --undefined-only --format=posix "${caller_objects[@]}" \
+    | awk '$2 == "U" && $1 ~ /^(__)?ksu_|^susfs_|^my_/ {print $1}' | sort -u)" || return 1
+  missing="$(comm -23 <(printf '%s\n' "$required") <(printf '%s\n' "$definitions"))"
+  if [[ -n "$missing" ]]; then
+    echo "::error::SUSFS kernel hooks require symbols absent from the selected KernelSU driver:"
+    printf '%s\n' "$missing"
+    return 1
+  fi
+  echo "[+] SUSFS exec and SELinux hooks match the compiled KernelSU/SUSFS symbols."
+}
+
 verify_nomount_source_integration() {
   local fs_dir="${NOMOUNT_FS_DIR:?}"
   local detected_version

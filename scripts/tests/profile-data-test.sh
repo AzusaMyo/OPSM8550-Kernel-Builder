@@ -269,8 +269,8 @@ grep -Fq -- '- SukiSU Ultra + SUSFS + ZeroMount + KPM (experimental)' "$UPSTREAM
   || fail "upstream health is missing SukiSU ZeroMount"
 grep -Fq 'SukiSU-Ultra-with-KPM|SukiSU-Ultra-with-susfs-KPM|SukiSU-Ultra-with-susfs-nomount-KPM|SukiSU-Ultra-with-susfs-zeromount-KPM)' "$RESOLVER_SCRIPT" \
   || fail "resolver does not route all SukiSU presets to SukiSU Ultra"
-grep -Fq 'SUSFS_COMMIT="$(sukisu_compatible_susfs_commit "$SUSFS_REF")"' "$RESOLVER_SCRIPT" \
-  || fail "resolver does not use the SukiSU-compatible SUSFS commit map"
+grep -Fq 'SUSFS_COMMIT="$(su_session_compatible_susfs_commit "$SUSFS_REF")"' "$RESOLVER_SCRIPT" \
+  || fail "resolver does not use the su-session-compatible SUSFS commit map"
 grep -Fq '"SukiSU-Ultra-with-KPM"|"SukiSU-Ultra-with-susfs-KPM"|"SukiSU-Ultra-with-susfs-nomount-KPM"|"SukiSU-Ultra-with-susfs-zeromount-KPM")' "$KSU_SETUP_SCRIPT" \
   || fail "KernelSU setup does not install SukiSU Ultra for all combined presets"
 grep -Fq 'ZEROMOUNT_COMMIT="2978dcad87dc7055e2e4596c603313c553a9a4b4"' "$RESOLVER_SCRIPT" \
@@ -366,14 +366,14 @@ for crdroid_soc in sm7550 sm8550 sm8650; do
     || fail "crDroid 13 $crdroid_soc ZeroMount patch mapping"
 done
 assert_eq "2c774fdb4f0aaa743598c1bec787f6c935574ed1" \
-  "$(sukisu_compatible_susfs_commit gki-android13-5.10)" "SukiSU Android 13 5.10 SUSFS pin"
+  "$(su_session_compatible_susfs_commit gki-android13-5.10)" "SukiSU Android 13 5.10 SUSFS pin"
 assert_eq "7af04b08f86a5f811cbea28805f96d52368e005f" \
-  "$(sukisu_compatible_susfs_commit gki-android13-5.15)" "SukiSU Android 13 5.15 SUSFS pin"
+  "$(su_session_compatible_susfs_commit gki-android13-5.15)" "SukiSU Android 13 5.15 SUSFS pin"
 assert_eq "aab99ba7693d94489fd32f1cc4c9d58396fffeee" \
-  "$(sukisu_compatible_susfs_commit gki-android14-5.15)" "SukiSU Android 14 5.15 SUSFS pin"
+  "$(su_session_compatible_susfs_commit gki-android14-5.15)" "SukiSU Android 14 5.15 SUSFS pin"
 assert_eq "6c2b5042ec656cd3ce9ad352a1e226e2e9e26779" \
-  "$(sukisu_compatible_susfs_commit gki-android14-6.1)" "SukiSU Android 14 6.1 SUSFS pin"
-if sukisu_compatible_susfs_commit unsupported >/dev/null 2>&1; then
+  "$(su_session_compatible_susfs_commit gki-android14-6.1)" "SukiSU Android 14 6.1 SUSFS pin"
+if su_session_compatible_susfs_commit unsupported >/dev/null 2>&1; then
   fail "unknown SukiSU SUSFS branches must not silently fall back to HEAD"
 fi
 version_is_at_least 2.2.0 2.2.0 || fail "SUSFS minimum version equality"
@@ -535,44 +535,117 @@ done
     fi
   }
   export -f git
-  for root_name in BakaSU ReSukiSU; do
-    for suffix in "" " + SUSFS" " + SUSFS + NoMount (experimental)" " + SUSFS + ZeroMount (experimental)"; do
-      [[ "$root_name$suffix" != "ReSukiSU + SUSFS" ]] || suffix=" + susfs"
-      resolve_root_solution "$root_name$suffix"
-      : > "$BAKASU_RESOLVER_FIXTURE/git.log"
-      : > "$BAKASU_RESOLVER_FIXTURE/env"
-      INPUT_BUILD_PROFILE="SM8550 | OnePlus 11 / 12R | LineageOS (recommended)" \
-        INPUT_BRANCH_MODE="manual" \
-        INPUT_KERNEL_BRANCH="lineage-23.0" \
-        INPUT_CLANG_CHOICE="Recommended (auto-select based on branch)" \
-        INPUT_ROOT_SOLUTION="$root_name$suffix" \
-        INPUT_BUILD_MODE="Patch/config validation only" \
-        GITHUB_ENV="$BAKASU_RESOLVER_FIXTURE/env" \
-        GITHUB_OUTPUT="$BAKASU_RESOLVER_FIXTURE/output" \
-        GITHUB_STEP_SUMMARY="$BAKASU_RESOLVER_FIXTURE/summary" \
-        bash "$RESOLVER_SCRIPT"
-      grep -Fxq "KSU_TYPE=$KSU_TYPE" "$BAKASU_RESOLVER_FIXTURE/env" \
-        || fail "resolver did not normalize $root_name$suffix"
-      grep -Fxq 'KSU_REPO=https://github.com/Baka-SU/BakaSU.git' "$BAKASU_RESOLVER_FIXTURE/env" \
-        || fail "resolver did not use the canonical BakaSU repository"
-      if [[ "$KSU_TYPE" == *susfs* ]]; then
-        grep -Fxq 'KSU_COMMIT=fa8311f632a215b5381ec644627c6198d1e8a13e' "$BAKASU_RESOLVER_FIXTURE/env" \
-          || fail "resolver lost the compatible BakaSU SUSFS pin"
-        if grep -Fq 'https://github.com/Baka-SU/BakaSU.git' "$BAKASU_RESOLVER_FIXTURE/git.log"; then
-          fail "pinned BakaSU SUSFS presets must not resolve a moving branch"
+  bakasu_profiles=(
+    "SM8450 | OnePlus 10T / Ace Pro | LineageOS community"
+    "SM8550 | OnePlus 11 / 12R | LineageOS (recommended)"
+    "SM8550 | OnePlus 11 / 12R | LineageOS (recommended)"
+    "SM8650 | OnePlus 12 | LineageOS (recommended)"
+  )
+  bakasu_branches=(lineage-20 lineage-20 lineage-23.0 lineage-23.0)
+  bakasu_susfs_refs=(gki-android13-5.10 gki-android13-5.15 gki-android14-5.15 gki-android14-6.1)
+  for target in "${!bakasu_profiles[@]}"; do
+    for root_name in BakaSU ReSukiSU; do
+      for suffix in "" " + SUSFS" " + SUSFS + NoMount (experimental)" " + SUSFS + ZeroMount (experimental)"; do
+        [[ "$root_name$suffix" != "ReSukiSU + SUSFS" ]] || suffix=" + susfs"
+        resolve_root_solution "$root_name$suffix"
+        : > "$BAKASU_RESOLVER_FIXTURE/git.log"
+        : > "$BAKASU_RESOLVER_FIXTURE/env"
+        INPUT_BUILD_PROFILE="${bakasu_profiles[$target]}" \
+          INPUT_BRANCH_MODE="manual" \
+          INPUT_KERNEL_BRANCH="${bakasu_branches[$target]}" \
+          INPUT_CLANG_CHOICE="Recommended (auto-select based on branch)" \
+          INPUT_ROOT_SOLUTION="$root_name$suffix" \
+          INPUT_BUILD_MODE="Patch/config validation only" \
+          GITHUB_ENV="$BAKASU_RESOLVER_FIXTURE/env" \
+          GITHUB_OUTPUT="$BAKASU_RESOLVER_FIXTURE/output" \
+          GITHUB_STEP_SUMMARY="$BAKASU_RESOLVER_FIXTURE/summary" \
+          bash "$RESOLVER_SCRIPT" > "$BAKASU_RESOLVER_FIXTURE/log"
+        grep -Fxq "KSU_TYPE=$KSU_TYPE" "$BAKASU_RESOLVER_FIXTURE/env" \
+          || fail "resolver did not normalize $root_name$suffix"
+        grep -Fxq 'KSU_REPO=https://github.com/Baka-SU/BakaSU.git' "$BAKASU_RESOLVER_FIXTURE/env" \
+          || fail "resolver did not use the canonical BakaSU repository"
+        if [[ "$KSU_TYPE" == *susfs* ]]; then
+          grep -Fxq 'KSU_COMMIT=fa8311f632a215b5381ec644627c6198d1e8a13e' "$BAKASU_RESOLVER_FIXTURE/env" \
+            || fail "resolver lost the compatible BakaSU SUSFS pin"
+          grep -Fxq "SUSFS_REF=${bakasu_susfs_refs[$target]}" "$BAKASU_RESOLVER_FIXTURE/env" \
+            || fail "resolver chose the wrong BakaSU SUSFS branch"
+          grep -Fxq "SUSFS_COMMIT=$(su_session_compatible_susfs_commit "${bakasu_susfs_refs[$target]}")" \
+            "$BAKASU_RESOLVER_FIXTURE/env" \
+            || fail "resolver lost the matching BakaSU SUSFS ABI pin"
+          if grep -Fq 'https://gitlab.com/simonpunk/susfs4ksu.git' "$BAKASU_RESOLVER_FIXTURE/git.log"; then
+            fail "pinned BakaSU SUSFS presets must not resolve the latest SUSFS branch"
+          fi
+          if grep -Fq 'https://github.com/Baka-SU/BakaSU.git' "$BAKASU_RESOLVER_FIXTURE/git.log"; then
+            fail "pinned BakaSU SUSFS presets must not resolve a moving branch"
+          fi
+        else
+          grep -Fxq 'KSU_COMMIT=1111111111111111111111111111111111111111' "$BAKASU_RESOLVER_FIXTURE/env" \
+            || fail "resolver did not resolve the BakaSU commit"
+          grep -Fxq 'ls-remote --exit-code https://github.com/Baka-SU/BakaSU.git refs/heads/main' \
+            "$BAKASU_RESOLVER_FIXTURE/git.log" \
+            || fail "resolver did not look up the BakaSU main branch"
         fi
-      else
-        grep -Fxq 'KSU_COMMIT=1111111111111111111111111111111111111111' "$BAKASU_RESOLVER_FIXTURE/env" \
-          || fail "resolver did not resolve the BakaSU commit"
-        grep -Fxq 'ls-remote --exit-code https://github.com/Baka-SU/BakaSU.git refs/heads/main' \
-          "$BAKASU_RESOLVER_FIXTURE/git.log" \
-          || fail "resolver did not look up the BakaSU main branch"
-      fi
-      if grep -Fq 'github.com/ReSukiSU/' "$BAKASU_RESOLVER_FIXTURE/git.log"; then
-        fail "resolver still contacts the old ReSukiSU repository"
-      fi
+        if grep -Fq 'github.com/ReSukiSU/' "$BAKASU_RESOLVER_FIXTURE/git.log"; then
+          fail "resolver still contacts the old ReSukiSU repository"
+        fi
+      done
     done
   done
+)
+
+# Reproduce the final-link failure with real objects: private SELinux helpers
+# cannot satisfy external hooks, and the old driver has no preinit entrypoints.
+(
+  hook_fixture="${NOMOUNT_FIXTURE_DIR}/susfs-hook-linkage"
+  mkdir -p "$hook_fixture/toolchain" "$hook_fixture/out/fs" \
+    "$hook_fixture/out/security/selinux" "$hook_fixture/out/drivers/kernelsu"
+  cd "$hook_fixture"
+  CLANG_ROOT="$hook_fixture/toolchain"
+  KSU_DRIVER_DIR=drivers
+  ln -s "$(command -v nm)" "$CLANG_ROOT/llvm-nm"
+  cat > provider.c <<'EOF'
+void ksu_handle_execveat(void) {}
+void ksu_handle_selinux_setprocattr(void) {}
+static void my_write_context(void) {}
+static void my_write_access(void) {}
+EOF
+  cc -c provider.c -o out/drivers/kernelsu/provider.o
+  printf '%s\n' 'void susfs_init(void) {}' > susfs.c
+  cc -c susfs.c -o out/fs/susfs.o
+  printf '%s\n' 'extern void ksu_handle_execveat(void);' \
+    'void exec_hook(void) { ksu_handle_execveat(); }' > caller.c
+  cc -c caller.c -o out/fs/exec.o
+  printf '%s\n' 'void local_selinux_hook(void) {}' > caller.c
+  cc -c caller.c -o out/security/selinux/hooks.o
+  cc -c caller.c -o out/security/selinux/selinuxfs.o
+  verify_susfs_hook_linkage >/dev/null \
+    || fail "matching legacy SUSFS hook ABI was rejected"
+  cat > caller.c <<'EOF'
+extern void ksu_preinit_handle_post_execveat(void), ksu_setup_preinit_file(void);
+extern void my_setprocattr(void), my_write_context(void), my_write_access(void);
+void incompatible_hooks(void) {
+  ksu_preinit_handle_post_execveat(); ksu_setup_preinit_file();
+  my_setprocattr(); my_write_context(); my_write_access();
+}
+EOF
+  cc -c caller.c -o out/fs/exec.o
+  if verify_susfs_hook_linkage > missing.log 2>&1; then
+    fail "SUSFS hook validation accepted the five unresolved symbols from run 39396003516"
+  fi
+  for missing_hook in ksu_preinit_handle_post_execveat ksu_setup_preinit_file \
+    my_setprocattr my_write_context my_write_access; do
+    grep -Fxq "$missing_hook" missing.log || fail "missing hook was not reported: $missing_hook"
+  done
+  cat > provider.c <<'EOF'
+void ksu_preinit_handle_post_execveat(void) {}
+void ksu_setup_preinit_file(void) {}
+void my_setprocattr(void) {}
+void my_write_context(void) {}
+void my_write_access(void) {}
+EOF
+  cc -c provider.c -o out/drivers/kernelsu/provider.o
+  verify_susfs_hook_linkage >/dev/null \
+    || fail "SUSFS hook validation rejected global definitions of the required hooks"
 )
 
 mkdir -p "$ZEROMOUNT_FIXTURE_DIR/fs"

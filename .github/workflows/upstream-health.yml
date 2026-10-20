@@ -51,6 +51,8 @@ jobs:
             profile: SM8550 | OnePlus 11 / 12R | LineageOS (recommended)
           - integration: BakaSU + SUSFS + ZeroMount (experimental)
             profile: SM8550 | OnePlus 11 / 12R | LineageOS (recommended)
+          - integration: BakaSU + SUSFS + ZeroMount (experimental)
+            profile: SM8550 | OnePlus 11 / 12R | crDroid
           - integration: No root changes
             profile: SM8550 | OnePlus 11 | LunarisOS
           - integration: No root changes

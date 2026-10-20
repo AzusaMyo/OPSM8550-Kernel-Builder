@@ -328,11 +328,13 @@ resolve_susfs_settings() {
   SUSFS_PATCH_FILE="50_add_susfs_in_${SUSFS_REF}.patch"
 }
 
-sukisu_compatible_susfs_commit() {
+su_session_compatible_susfs_commit() {
   local susfs_ref="$1"
 
   # Keep every kernel branch pinned to a SUSFS v2.3.0 revision whose KernelSU
-  # patch matches the su-session fd ABI introduced by SukiSU Ultra 86e9b3b.
+  # patch matches the su-session fd ABI in the pinned SukiSU Ultra and BakaSU
+  # drivers. Newer patches require preinit and external SELinux hooks that
+  # these driver revisions do not export.
   # The revisions share that KernelSU patch but retain branch-specific patches.
   case "$susfs_ref" in
     gki-android13-5.10) echo "2c774fdb4f0aaa743598c1bec787f6c935574ed1" ;;
@@ -340,7 +342,7 @@ sukisu_compatible_susfs_commit() {
     gki-android14-5.15) echo "aab99ba7693d94489fd32f1cc4c9d58396fffeee" ;;
     gki-android14-6.1) echo "6c2b5042ec656cd3ce9ad352a1e226e2e9e26779" ;;
     *)
-      echo "::error::No SukiSU-compatible SUSFS commit is pinned for $susfs_ref" >&2
+      echo "::error::No su-session-compatible SUSFS commit is pinned for $susfs_ref" >&2
       return 1
       ;;
   esac

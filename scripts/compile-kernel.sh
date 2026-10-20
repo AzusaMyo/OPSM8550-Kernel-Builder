@@ -245,6 +245,7 @@ if [[ "$BUILD_MODE" == "Patch/config validation only" ]]; then
   if [[ "$KSU_TYPE" == *susfs* ]]; then
     SMOKE_TARGETS+=(
       fs/susfs.o
+      fs/exec.o
       fs/namespace.o
       fs/proc/task_mmu.o
       kernel/reboot.o
@@ -291,6 +292,7 @@ if [[ "$BUILD_MODE" == "Patch/config validation only" ]]; then
     fi
     COMPILE_SECONDS=$((COMPILE_SECONDS + $(date +%s) - COMPILE_STARTED_AT))
     if [[ "$KSU_TYPE" == *susfs* ]]; then
+      verify_susfs_hook_linkage
       verify_susfs_binary_presence
     fi
     if [[ "$KSU_TYPE" == *nomount* ]]; then

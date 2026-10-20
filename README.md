@@ -175,6 +175,10 @@ BakaSU SUSFS presets pin `fa8311f632a215b5381ec644627c6198d1e8a13e`,
 which passed a full batch build on September 27. Its latest `main` suspends
 SUSFS builds pending upstream SELinux hook updates; this pin must be revisited
 when those updates land. BakaSU without SUSFS continues to follow `main`.
+BakaSU SUSFS presets also pin the matching SUSFS v2.3.0 revision for each GKI
+branch, using the same su-session ABI map as SukiSU Ultra. Following the latest
+SUSFS branch with this older driver can introduce undefined preinit and SELinux
+hook symbols at the final kernel link.
 Patch/config validation uses the runner's distribution Clang, LLD, and LLVM
 binutils; full builds use the selected pinned AOSP toolchain.
 
@@ -319,7 +323,7 @@ Pushes and pull requests run:
 - actionlint for all workflow files
 
 `Check upstream health` runs every Monday and can also be started manually. It
-resolves exact commits for all twelve profiles, then runs a twenty-nine-job
+resolves exact commits for all twelve profiles, then runs a thirty-job
 smoke-test matrix: KernelSU-Next + SUSFS + NoMount, SukiSU Ultra + SUSFS +
 NoMount + KPM
 (including the crDroid OnePlus 12 / Android 6.1 vendor include drift),
@@ -330,6 +334,7 @@ baseline validation for the LunarisOS OnePlus 11 and crDroid OnePlus 12 sources.
 The SukiSU Ultra ZeroMount preset is validated across the representative
 5.10, 5.15, and 6.1 source families; the KernelSU-Next and BakaSU ZeroMount
 presets additionally run against the representative SM8550 LineageOS source.
+BakaSU ZeroMount also runs against the SM8550 crDroid source.
 
 ## Important limitations
 
