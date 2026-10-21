@@ -603,21 +603,27 @@ done
   CLANG_ROOT="$hook_fixture/toolchain"
   KSU_DRIVER_DIR=drivers
   ln -s "$(command -v nm)" "$CLANG_ROOT/llvm-nm"
+  hook_cc=(cc)
+  if [[ "$(uname -s)" == Darwin ]]; then
+    # Match the kernel's ELF symbol names; Mach-O prefixes C symbols with '_',
+    # which would let the missing-hook negative test pass without checking them.
+    hook_cc+=(--target=aarch64-linux-gnu)
+  fi
   cat > provider.c <<'EOF'
 void ksu_handle_execveat(void) {}
 void ksu_handle_selinux_setprocattr(void) {}
-static void my_write_context(void) {}
-static void my_write_access(void) {}
+__attribute__((used)) static void my_write_context(void) {}
+__attribute__((used)) static void my_write_access(void) {}
 EOF
-  cc -c provider.c -o out/drivers/kernelsu/provider.o
+  "${hook_cc[@]}" -c provider.c -o out/drivers/kernelsu/provider.o
   printf '%s\n' 'void susfs_init(void) {}' > susfs.c
-  cc -c susfs.c -o out/fs/susfs.o
+  "${hook_cc[@]}" -c susfs.c -o out/fs/susfs.o
   printf '%s\n' 'extern void ksu_handle_execveat(void);' \
     'void exec_hook(void) { ksu_handle_execveat(); }' > caller.c
-  cc -c caller.c -o out/fs/exec.o
+  "${hook_cc[@]}" -c caller.c -o out/fs/exec.o
   printf '%s\n' 'void local_selinux_hook(void) {}' > caller.c
-  cc -c caller.c -o out/security/selinux/hooks.o
-  cc -c caller.c -o out/security/selinux/selinuxfs.o
+  "${hook_cc[@]}" -c caller.c -o out/security/selinux/hooks.o
+  "${hook_cc[@]}" -c caller.c -o out/security/selinux/selinuxfs.o
   verify_susfs_hook_linkage >/dev/null \
     || fail "matching legacy SUSFS hook ABI was rejected"
   cat > caller.c <<'EOF'
@@ -628,7 +634,7 @@ void incompatible_hooks(void) {
   my_setprocattr(); my_write_context(); my_write_access();
 }
 EOF
-  cc -c caller.c -o out/fs/exec.o
+  "${hook_cc[@]}" -c caller.c -o out/fs/exec.o
   if verify_susfs_hook_linkage > missing.log 2>&1; then
     fail "SUSFS hook validation accepted the five unresolved symbols from run 39396003516"
   fi
@@ -643,7 +649,7 @@ void my_setprocattr(void) {}
 void my_write_context(void) {}
 void my_write_access(void) {}
 EOF
-  cc -c provider.c -o out/drivers/kernelsu/provider.o
+  "${hook_cc[@]}" -c provider.c -o out/drivers/kernelsu/provider.o
   verify_susfs_hook_linkage >/dev/null \
     || fail "SUSFS hook validation rejected global definitions of the required hooks"
 )

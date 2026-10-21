@@ -179,6 +179,18 @@ BakaSU SUSFS presets also pin the matching SUSFS v2.3.0 revision for each GKI
 branch, using the same su-session ABI map as SukiSU Ultra. Following the latest
 SUSFS branch with this older driver can introduce undefined preinit and SELinux
 hook symbols at the final kernel link.
+
+For these pinned BakaSU SUSFS builds, the driver still identifies itself as
+ReSukiSU and exposes UAPI **4**. Use the upstream
+[ReSukiSU v4.2.0-rc3 manager](https://github.com/Baka-SU/BakaSU/releases/tag/v4.2.0-rc3),
+whose shared UAPI is also 4, or build the manager from the pinned driver commit.
+The BakaSU repository rename alone does not update the embedded driver ABI.
+A newer SukiSU manager showing UAPI 6 can report `Kernel update required`
+against this driver; changing the displayed version cannot fix that mismatch.
+Install the matching BakaSU kernel ZIP and manager together when switching from
+SukiSU. Device boot, root grants, and module installation still require device
+testing after flashing.
+
 Patch/config validation uses the runner's distribution Clang, LLD, and LLVM
 binutils; full builds use the selected pinned AOSP toolchain.
 
