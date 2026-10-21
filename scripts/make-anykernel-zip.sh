@@ -38,6 +38,8 @@ esac
 KSU_COMMIT="${KSU_COMMIT:-}"
 KSU_REPO="${KSU_REPO:-}"
 KSU_REF="${KSU_REF:-}"
+KSU_UAPI_VERSION="${KSU_UAPI_VERSION:-}"
+KSU_UAPI_PATCH_SHA256="${KSU_UAPI_PATCH_SHA256:-}"
 SUSFS_REF="${SUSFS_REF:-}"
 SUSFS_COMMIT="${SUSFS_COMMIT:-}"
 SUSFS_VERSION="${SUSFS_VERSION:-}"
@@ -172,6 +174,8 @@ jq -n \
   --arg ksu_repo "$KSU_REPO" \
   --arg ksu_ref "$KSU_REF" \
   --arg ksu_commit "$KSU_COMMIT" \
+  --arg ksu_uapi_version "$KSU_UAPI_VERSION" \
+  --arg ksu_uapi_patch_sha256 "$KSU_UAPI_PATCH_SHA256" \
   --arg susfs_ref "$SUSFS_REF" \
   --arg susfs_commit "$SUSFS_COMMIT" \
   --arg susfs_version "$SUSFS_VERSION" \
@@ -210,6 +214,8 @@ jq -n \
     kernelsu_repository: $ksu_repo,
     kernelsu_ref: $ksu_ref,
     kernelsu_commit: $ksu_commit,
+    kernelsu_uapi_version: $ksu_uapi_version,
+    kernelsu_uapi_patch_sha256: $ksu_uapi_patch_sha256,
     susfs_ref: $susfs_ref,
     susfs_commit: $susfs_commit,
     susfs_version: $susfs_version,
@@ -271,6 +277,7 @@ cat > "$ASSET_DIR/release-notes.md" <<EOF_NOTES
 - ROM GKI module compatibility: ${ROM_GKI_MODULE_COMPAT}
 - Root solution: ${KSU_TYPE}
 - KernelSU source: ${KSU_REPO:-disabled} (${KSU_REF:-none}, ${KSU_COMMIT:-none})
+- KernelSU UAPI backport: ${KSU_UAPI_VERSION:-none} (patch SHA-256: ${KSU_UAPI_PATCH_SHA256:-none})
 - KPM: ${KPM_ENABLED}
 - SUSFS: ${SUSFS_NOTE}
 - NoMount: ${NOMOUNT_NOTE}

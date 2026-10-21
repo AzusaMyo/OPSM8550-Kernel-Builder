@@ -53,6 +53,8 @@ append_file_block() {
     echo "- KernelSU repository: ${KSU_REPO:-unknown}"
     echo "- KernelSU ref: ${KSU_REF:-unknown}"
     echo "- KernelSU commit: \`${KSU_COMMIT}\`"
+    echo "- KernelSU UAPI backport: ${KSU_UAPI_VERSION:-none}"
+    echo "- UAPI patch SHA-256: ${KSU_UAPI_PATCH_SHA256:-none}"
   fi
   if [[ -n "${SUSFS_REF:-}" ]]; then
     echo "- susfs ref: ${SUSFS_REF}"

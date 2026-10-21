@@ -180,16 +180,26 @@ branch, using the same su-session ABI map as SukiSU Ultra. Following the latest
 SUSFS branch with this older driver can introduce undefined preinit and SELinux
 hook symbols at the final kernel link.
 
-For these pinned BakaSU SUSFS builds, the driver still identifies itself as
-ReSukiSU and exposes UAPI **4**. Use the upstream
-[ReSukiSU v4.2.0-rc3 manager](https://github.com/Baka-SU/BakaSU/releases/tag/v4.2.0-rc3),
-whose shared UAPI is also 4, or build the manager from the pinned driver commit.
-The BakaSU repository rename alone does not update the embedded driver ABI.
-A newer SukiSU manager showing UAPI 6 can report `Kernel update required`
-against this driver; changing the displayed version cannot fix that mismatch.
-Install the matching BakaSU kernel ZIP and manager together when switching from
-SukiSU. Device boot, root grants, and module installation still require device
-testing after flashing.
+The pinned drivers originally exposed UAPI 4, which causes `Kernel update
+required` with BakaSU UAPI 5 and SukiSU UAPI 6 managers even when the kernel
+build succeeds. The pipeline now backports the actual interfaces:
+
+- BakaSU SUSFS: UAPI **5**, including the service-stage start/skip result and
+  reset for an emulated soft reboot, from upstream commit `8770c7e3`.
+- SukiSU SUSFS: UAPI **6**, including the same service-stage handling,
+  root-only batch symbol lookup, and `/metadata/vold/ksu/modules.rc` support,
+  from upstream commits `7ef2dbb7` and `3b607917`. The optional preinit runner
+  is disabled and its capability flag stays clear. The older KPM interfaces
+  are retained; newer extension-hub features are outside this backport.
+
+Backports apply only to the exact tested driver commits; unknown patch drift
+fails the build. `build-info.json` and release notes record the resulting UAPI
+and patch SHA-256. The pinned BakaSU driver's full name can still contain
+ReSukiSU; its interface suffix should now be `/5`. SukiSU should show UAPI 6.
+Older downloaded ZIPs still contain UAPI 4 and must be replaced by a new build;
+updating the manager alone does not update an embedded kernel driver.
+Device boot, root grants, and module installation require device testing after
+flashing the device/ROM-matched package.
 
 Patch/config validation uses the runner's distribution Clang, LLD, and LLVM
 binutils; full builds use the selected pinned AOSP toolchain.

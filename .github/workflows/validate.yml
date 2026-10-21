@@ -17,6 +17,18 @@ permissions:
   contents: read
 
 jobs:
+  uapi-backports:
+    name: Verify manager UAPI backports with pinned SUSFS sources
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Test composed upstream handlers
+        run: bash scripts/tests/ksu-uapi-test.sh
+
   lint:
     runs-on: ubuntu-24.04
     steps:

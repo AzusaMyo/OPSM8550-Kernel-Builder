@@ -1,0 +1,495 @@
+Backport SukiSU UAPI 5 service-stage handling (7ef2dbb7fa68722c142f5266f0a7b95c8fb6e7e9)
+and UAPI 6 symbol lookup + modules.rc path support (3b607917d2537efcd89c43004d4d8bbd8fb84d95).
+Base: 7fbbb1f12e2410b69c8ebf958be84f165b8d0c93.
+The optional preinit runner is disabled, as permitted by upstream KSU_NO_PREINIT;
+KSU_GET_INFO_FLAG_PREINIT is never advertised. Keep the tested SUSFS hook ABI.
+Sources: https://github.com/SukiSU-Ultra/SukiSU-Ultra/commit/7ef2dbb7fa68722c142f5266f0a7b95c8fb6e7e9
+         https://github.com/SukiSU-Ultra/SukiSU-Ultra/commit/3b607917d2537efcd89c43004d4d8bbd8fb84d95
+License: GPL-2.0-only for kernel code; GPL-3.0-or-later for shared UAPI.
+
+diff --git a/kernel/infra/symbol_resolver.c b/kernel/infra/symbol_resolver.c
+index cb061eaa..fe65337a 100644
+--- a/kernel/infra/symbol_resolver.c
++++ b/kernel/infra/symbol_resolver.c
+@@ -1,5 +1,10 @@
++#include <linux/bsearch.h>
+ #include <linux/kallsyms.h>
+ #include <linux/module.h>
++#include <linux/mm.h>
++#include <linux/sched/signal.h>
++#include <linux/slab.h>
++#include <linux/sort.h>
+ #include <linux/string.h>
+ #include <linux/version.h>
+ 
+@@ -172,6 +177,203 @@ void *ksu_resolve_symbol_for_functable_hook(const char *symbol_name)
+ #endif
+ }
+ 
++struct ksu_batch_entry {
++    const char *name;
++    unsigned long addr;
++    u32 idx;
++};
++
++struct ksu_batch_ctx {
++    struct ksu_batch_entry *entries; // sorted by name
++    u32 count;
++    u32 remaining;
++    char key[KSYM_NAME_LEN];
++};
++
++static int ksu_batch_entry_cmp(const void *a, const void *b)
++{
++    return strcmp(((const struct ksu_batch_entry *)a)->name, ((const struct ksu_batch_entry *)b)->name);
++}
++
++static int ksu_batch_key_cmp(const void *key, const void *elt)
++{
++    return strcmp(key, ((const struct ksu_batch_entry *)elt)->name);
++}
++
++/*
++ * Match one kallsyms entry against the requested names. Same rule as
++ * ksuinit's /proc/kallsyms walk: the kernel name is cut at the first '$',
++ * else at ".llvm.", and the first match in kallsyms order wins.
++ * Returns 1 to stop the walk once every name is resolved.
++ */
++static int ksu_batch_match(struct ksu_batch_ctx *ctx, const char *name, unsigned long addr)
++{
++    struct ksu_batch_entry *e, *end = ctx->entries + ctx->count;
++    const char *cut, *key = name;
++    size_t len;
++
++    if (fatal_signal_pending(current))
++        return -EINTR;
++    if (!name || !addr)
++        return 0;
++
++    cut = strchr(name, '$');
++    if (!cut)
++        cut = strstr(name, ".llvm.");
++    if (cut) {
++        len = cut - name;
++        if (!len || len >= sizeof(ctx->key))
++            return 0;
++        memcpy(ctx->key, name, len);
++        ctx->key[len] = '\0';
++        key = ctx->key;
++    }
++
++    e = bsearch(key, ctx->entries, ctx->count, sizeof(*e), ksu_batch_key_cmp);
++    if (!e)
++        return 0;
++    // The same name may be requested more than once.
++    while (e > ctx->entries && !strcmp(e[-1].name, key))
++        e--;
++    for (; e < end && !strcmp(e->name, key); e++) {
++        if (!e->addr) {
++            e->addr = addr;
++            ctx->remaining--;
++        }
++    }
++    return ctx->remaining ? 0 : 1;
++}
++
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
++static int ksu_batch_cb(void *data, const char *name, unsigned long addr)
++{
++    return ksu_batch_match(data, name, addr);
++}
++#else
++static int ksu_batch_cb(void *data, const char *name, struct module *mod, unsigned long addr)
++{
++    // vmlinux symbols come first; like ksuinit, stop at module symbols.
++    if (mod)
++        return 1;
++    return ksu_batch_match(data, name, addr);
++}
++#endif
++
++#if HAVE_ON_EACH_MATCH_SYMBOL
++// Equal names are ordered by address, i.e. kallsyms order: keep the first.
++static int ksu_first_match_cb(void *data, unsigned long addr)
++{
++    *(unsigned long *)data = addr;
++    return 1;
++}
++
++// Indexed per-name lookups, which also strip ".llvm." where the kernel does.
++static __nocfi int ksu_batch_lookup_indexed(struct ksu_batch_ctx *ctx)
++{
++    u32 i;
++
++    if (!kallsyms_on_each_match_symbol_fn)
++        return 0;
++    for (i = 0; i < ctx->count && ctx->remaining; i++) {
++        struct ksu_batch_entry *e = &ctx->entries[i];
++
++        if (e->addr)
++            continue;
++        kallsyms_on_each_match_symbol_fn(ksu_first_match_cb, e->name, &e->addr);
++        if (!e->addr)
++            continue;
++        ctx->remaining--;
++        // Duplicate requests share the result.
++        while (i + 1 < ctx->count && !strcmp(ctx->entries[i + 1].name, e->name)) {
++            ctx->entries[++i].addr = e->addr;
++            ctx->remaining--;
++        }
++        if (fatal_signal_pending(current))
++            return -EINTR;
++    }
++    return 0;
++}
++#endif
++
++/*
++ * Resolve @count kernel image symbols. NULL entries in @names are skipped.
++ * @addrs[i] is 0 for names that do not resolve. Returns the number of
++ * resolved names, or -errno.
++ *
++ * 6.1+ kernels index kallsyms by name, so names are looked up one by one
++ * there; whatever that misses ('$' suffixes, ".llvm." on 6.12+, unknown
++ * names) and every name on older kernels, where a lookup by name is a linear
++ * scan, is resolved by a single kallsyms walk.
++ */
++int __nocfi ksu_lookup_kernel_symbols(const char *const *names, unsigned long *addrs, u32 count)
++{
++    struct ksu_batch_ctx *ctx;
++    int ret = 0;
++    u32 i, n = 0;
++
++    ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
++    if (!ctx)
++        return -ENOMEM;
++    ctx->entries = kvmalloc_array(count, sizeof(*ctx->entries), GFP_KERNEL);
++    if (!ctx->entries) {
++        kfree(ctx);
++        return -ENOMEM;
++    }
++
++    for (i = 0; i < count; i++) {
++        addrs[i] = 0;
++        if (!names[i])
++            continue;
++        ctx->entries[n].name = names[i];
++        ctx->entries[n].addr = 0;
++        ctx->entries[n].idx = i;
++        n++;
++    }
++    ctx->count = n;
++    ctx->remaining = n;
++    sort(ctx->entries, n, sizeof(*ctx->entries), ksu_batch_entry_cmp, NULL);
++
++#if HAVE_ON_EACH_MATCH_SYMBOL
++    if (n)
++        ret = ksu_batch_lookup_indexed(ctx);
++#endif
++
++    if (ret >= 0 && ctx->remaining) {
++#if !ALWAYS_HAVE_ON_EACH_SYMBOL
++        if (kallsyms_on_each_symbol_fn) {
++            ret = kallsyms_on_each_symbol_fn(ksu_batch_cb, ctx);
++        } else {
++            // No kallsyms walker: fall back to exact per-name lookups.
++            for (i = 0; i < n; i++) {
++                if (ctx->entries[i].addr)
++                    continue;
++                ctx->entries[i].addr = find_kernel_symbol_exact(ctx->entries[i].name);
++                if (fatal_signal_pending(current)) {
++                    ret = -EINTR;
++                    break;
++                }
++                cond_resched();
++            }
++        }
++#else
++        ret = kallsyms_on_each_symbol(ksu_batch_cb, ctx);
++#endif
++    }
++
++    if (ret >= 0) {
++        ret = 0;
++        for (i = 0; i < n; i++) {
++            addrs[ctx->entries[i].idx] = ctx->entries[i].addr;
++            if (ctx->entries[i].addr)
++                ret++;
++        }
++    }
++
++    kvfree(ctx->entries);
++    kfree(ctx);
++    return ret;
++}
++
+ void __init ksu_init_symbol_resolver()
+ {
+ #if !ALWAYS_HAVE_ON_EACH_SYMBOL
+diff --git a/kernel/infra/symbol_resolver.h b/kernel/infra/symbol_resolver.h
+index 8ce4ef1e..960a81a8 100644
+--- a/kernel/infra/symbol_resolver.h
++++ b/kernel/infra/symbol_resolver.h
+@@ -1,8 +1,11 @@
+ #ifndef __KSU_SYMBOL_RESOLVER_H
+ #define __KSU_SYMBOL_RESOLVER_H
+ 
++#include <linux/types.h>
++
+ void *ksu_resolve_symbol_for_functable_hook(const char *symbol_name);
+ unsigned long find_kernel_symbol_exact(const char *symbol_name);
++int ksu_lookup_kernel_symbols(const char *const *names, unsigned long *addrs, u32 count);
+ void ksu_init_symbol_resolver();
+ 
+ #endif
+diff --git a/kernel/runtime/ksud_integration.c b/kernel/runtime/ksud_integration.c
+index 5bf84cb6..22744159 100644
+--- a/kernel/runtime/ksud_integration.c
++++ b/kernel/runtime/ksud_integration.c
+@@ -185,7 +185,8 @@ static struct file_operations fops_proxy;
+ static ssize_t ksu_rc_pos = 0;
+ const size_t ksu_rc_len = sizeof(KERNEL_SU_RC) - 1;
+ 
+-// Prefer /metadata/watchdog/ when present, else /metadata.
++// Prefer /metadata/vold, else /metadata/watchdog, else /metadata.
++#define MODULE_RC_PATH_VOLD "/metadata/vold/ksu/modules.rc"
+ #define MODULE_RC_PATH_WATCHDOG "/metadata/watchdog/ksu/modules.rc"
+ #define MODULE_RC_PATH_DEFAULT "/metadata/ksu/modules.rc"
+ static char *module_rc_buf;
+@@ -194,7 +195,12 @@ static ssize_t module_rc_pos;
+ 
+ static struct file *open_module_rc(const char **chosen_path)
+ {
+-    struct file *f = filp_open(MODULE_RC_PATH_WATCHDOG, O_RDONLY, 0);
++    struct file *f = filp_open(MODULE_RC_PATH_VOLD, O_RDONLY, 0);
++    if (!IS_ERR(f)) {
++        *chosen_path = MODULE_RC_PATH_VOLD;
++        return f;
++    }
++    f = filp_open(MODULE_RC_PATH_WATCHDOG, O_RDONLY, 0);
+     if (!IS_ERR(f)) {
+         *chosen_path = MODULE_RC_PATH_WATCHDOG;
+         return f;
+diff --git a/kernel/supercall/dispatch.c b/kernel/supercall/dispatch.c
+index 8b8385ef..ea5c39b4 100644
+--- a/kernel/supercall/dispatch.c
++++ b/kernel/supercall/dispatch.c
+@@ -1,5 +1,8 @@
+ #include <linux/capability.h>
+ #include <linux/cred.h>
++#include <linux/kallsyms.h>
++#include <linux/mm.h>
++#include <linux/string.h>
+ #include <linux/slab.h>
+ #include <linux/vmalloc.h>
+ #include <linux/uaccess.h>
+@@ -22,6 +25,7 @@
+ #include "sulog/event.h"
+ #include "sulog/fd.h"
+ #include "supercall/supercall.h"
++#include "infra/symbol_resolver.h"
+ #include "feature/uts_spoof.h"
+ #include "feature/cpu_spoof.h"
+ 
+@@ -65,6 +69,7 @@ static int do_get_info(void __user *arg)
+     cmd.flags |= KSU_GET_INFO_FLAG_PR_BUILD;
+ #endif
+     cmd.features = KSU_FEATURE_MAX;
++    /* SUSFS builds have no preinit runner: leave KSU_GET_INFO_FLAG_PREINIT clear. */
+     cmd.uapi_version = KERNEL_SU_UAPI_VERSION;
+ 
+     if (copy_to_user(arg, &cmd, sizeof(cmd))) {
+@@ -107,6 +112,7 @@ static int do_get_info_legacy(void __user *arg)
+ 
+ static int do_report_event(void __user *arg)
+ {
++    static bool services_started = false;
+     struct ksu_report_event_cmd cmd;
+ 
+     if (copy_from_user(&cmd, arg, sizeof(cmd))) {
+@@ -116,5 +122,8 @@ static int do_report_event(void __user *arg)
+     switch (cmd.event) {
+     case EVENT_POST_FS_DATA: {
+         static bool post_fs_data_lock = false;
++
++        // Reset for emulated soft reboot
++        services_started = false;
+         if (!post_fs_data_lock) {
+             post_fs_data_lock = true;
+@@ -145,6 +154,15 @@ static int do_report_event(void __user *arg)
+         on_module_mounted();
+         break;
+     }
++    case EVENT_SERVICES: {
++        if (services_started) {
++            pr_info("services already started, skipping\n");
++            return 0;
++        }
++        services_started = true;
++        pr_info("services triggered\n");
++        return 1;
++    }
+     default:
+         break;
+     }
+@@ -701,6 +719,85 @@ static int do_disable_escape_to_root(void __user *arg)
+     return 0;
+ }
+ 
++/*
++ * Resolve symbols of the running kernel image, exported or not, matching
++ * them like ksuinit's /proc/kallsyms walk. Userspace uses this to bind a
++ * module's undefined symbols before init_module, so the kernel never parses
++ * the module ELF itself.
++ */
++static int do_lookup_symbols(void __user *arg)
++{
++    struct ksu_lookup_symbols_cmd cmd;
++    const u64 __user *unames;
++    u64 __user *uaddrs;
++    char **names;
++    unsigned long *addrs;
++    int ret = 0;
++    u32 i;
++
++    if (copy_from_user(&cmd, arg, sizeof(cmd)))
++        return -EFAULT;
++
++    if (cmd.flags) {
++        pr_err("lookup_symbols: unsupported flags 0x%x\n", cmd.flags);
++        return -EINVAL;
++    }
++    if (!cmd.count || cmd.count > KSU_LOOKUP_SYMBOLS_MAX)
++        return -EINVAL;
++
++    names = kvcalloc(cmd.count, sizeof(*names), GFP_KERNEL);
++    addrs = kvcalloc(cmd.count, sizeof(*addrs), GFP_KERNEL);
++    if (!names || !addrs) {
++        ret = -ENOMEM;
++        goto out;
++    }
++
++    unames = (const u64 __user *)(uintptr_t)cmd.names;
++    uaddrs = (u64 __user *)(uintptr_t)cmd.addrs;
++    for (i = 0; i < cmd.count; i++) {
++        u64 uname;
++        char *name;
++
++        if (get_user(uname, unames + i)) {
++            ret = -EFAULT;
++            goto out;
++        }
++        name = strndup_user((const char __user *)(uintptr_t)uname, KSYM_NAME_LEN);
++        if (IS_ERR(name)) {
++            // An overlong name cannot be a kernel symbol: report it missing.
++            if (PTR_ERR(name) == -EINVAL)
++                continue;
++            ret = PTR_ERR(name);
++            goto out;
++        }
++        if (!*name) {
++            kfree(name);
++            continue;
++        }
++        names[i] = name;
++    }
++
++    ret = ksu_lookup_kernel_symbols((const char *const *)names, addrs, cmd.count);
++    if (ret < 0)
++        goto out;
++
++    for (i = 0; i < cmd.count; i++) {
++        if (put_user((u64)addrs[i], uaddrs + i)) {
++            ret = -EFAULT;
++            goto out;
++        }
++    }
++
++out:
++    if (names) {
++        for (i = 0; i < cmd.count; i++)
++            kfree(names[i]);
++    }
++    kvfree(names);
++    kvfree(addrs);
++    return ret;
++}
++
+ static int do_set_spoof_version(void __user *arg)
+ {
+     struct ksu_set_spoof_version_cmd cmd;
+@@ -1020,6 +1117,12 @@ static const struct ksu_ioctl_cmd_map ksu_ioctl_handlers[] = {
+         .perm_check = only_root,
+         .allow_su_session = true
+     },
++    {
++        .cmd = KSU_IOCTL_LOOKUP_SYMBOLS,
++        .name = "LOOKUP_SYMBOLS",
++        .handler = do_lookup_symbols,
++        .perm_check = only_root
++    },
+     {
+         .cmd = KSU_IOCTL_SET_SPOOF_VERSION,
+         .name = "SET_SPOOF_VERSION",
+diff --git a/uapi/supercall.h b/uapi/supercall.h
+index 0f5a5de4..b22a3be9 100644
+--- a/uapi/supercall.h
++++ b/uapi/supercall.h
+@@ -9,7 +9,9 @@
+ // 2: allowlist v4 root profile flags
+ // 3: scoped su-session driver fd
+ // 4: add KSU_GET_INFO_FLAG_BUNDLED
+-static const __u32 KERNEL_SU_UAPI_VERSION = 4;
++// 5: add EVENT_SERVICES with a start/skip result
++// 6: add KSU_IOCTL_LOOKUP_SYMBOLS and KSU_GET_INFO_FLAG_PREINIT; modules.rc and preinit may live under /metadata/vold/ksu
++static const __u32 KERNEL_SU_UAPI_VERSION = 6;
+ 
+ /* Magic numbers for reboot hook to install fd */
+ static const __u32 KSU_INSTALL_MAGIC1 = 0xDEADBEEF;
+@@ -23,12 +25,15 @@ struct ksu_become_daemon_cmd {
+ static const __u32 EVENT_POST_FS_DATA = 1;
+ static const __u32 EVENT_BOOT_COMPLETED = 2;
+ static const __u32 EVENT_MODULE_MOUNTED = 3;
++static const __u32 EVENT_SERVICES = 4;
+ 
+ static const __u32 KSU_GET_INFO_FLAG_LKM = (1U << 0);
+ static const __u32 KSU_GET_INFO_FLAG_MANAGER = (1U << 1);
+ static const __u32 KSU_GET_INFO_FLAG_LATE_LOAD = (1U << 2);
+ static const __u32 KSU_GET_INFO_FLAG_PR_BUILD = (1U << 3);
+ static const __u32 KSU_GET_INFO_FLAG_BUNDLED = (1U << 4);
++/* The preinit runner will run module preinit actions on boot */
++static const __u32 KSU_GET_INFO_FLAG_PREINIT = (1U << 5);
+ 
+ struct ksu_get_info_cmd {
+     __u32 version; /* Output: KERNEL_SU_VERSION */
+@@ -148,6 +153,22 @@ struct ksu_get_sulog_fd_cmd {
+     __u32 flags; /* Input: reserved for future use, must be 0 */
+ };
+ 
++/*
++ * Batch kernel image symbol lookup. Returns the number of symbols found; the
++ * address of a symbol that does not exist in the running kernel is set to 0.
++ * Matches like ksuinit's /proc/kallsyms walk: a kernel symbol name is cut at
++ * its first '$', else at ".llvm.", and the first match in kallsyms order wins.
++ * Module symbols are never returned.
++ */
++struct ksu_lookup_symbols_cmd {
++    __aligned_u64 names; /* Input: user pointer to `count` user pointers to null-terminated names */
++    __aligned_u64 addrs; /* Output: user pointer to `count` __u64 symbol addresses */
++    __u32 count; /* Input: number of symbols, at most KSU_LOOKUP_SYMBOLS_MAX */
++    __u32 flags; /* Input: reserved for future use, must be 0 */
++};
++
++static const __u32 KSU_LOOKUP_SYMBOLS_MAX = 1024;
++
+ struct ksu_set_spoof_version_cmd {
+     __u8 release[65]; /* Input: e.g., "5.10.115-android12-9-g00000000" */
+     __u8 version[65]; /* Input: e.g., "#1 SMP PREEMPT Thu Jan 1 00:00:00 UTC 2026" */
+@@ -227,6 +248,7 @@ static const __u32 KSU_IOCTL_ADD_TRY_UMOUNT = _IOC(_IOC_WRITE, 'K', 18, 0);
+ static const __u32 KSU_IOCTL_SET_INIT_PGRP = _IO('K', 19);
+ static const __u32 KSU_IOCTL_GET_SULOG_FD = _IOW('K', 20, struct ksu_get_sulog_fd_cmd);
+ static const __u32 KSU_IOCTL_DISABLE_ESCAPE_TO_ROOT = _IO('K', 21);
++static const __u32 KSU_IOCTL_LOOKUP_SYMBOLS = _IOW('K', 22, struct ksu_lookup_symbols_cmd);
+ // Other IOCTL command definitions
+ static const __u32 KSU_IOCTL_GET_FULL_VERSION = _IOC(_IOC_READ, 'K', 100, 0);
+ static const __u32 KSU_IOCTL_HOOK_TYPE = _IOC(_IOC_READ, 'K', 101, 0);

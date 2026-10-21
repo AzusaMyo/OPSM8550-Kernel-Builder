@@ -11,6 +11,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "${SCRIPT_DIR}/lib/kernel-helpers.sh"
 # shellcheck source=lib/ksu-setup.sh
 . "${SCRIPT_DIR}/lib/ksu-setup.sh"
+# shellcheck source=lib/ksu-uapi.sh
+. "${SCRIPT_DIR}/lib/ksu-uapi.sh"
 # shellcheck source=lib/susfs-apply.sh
 . "${SCRIPT_DIR}/lib/susfs-apply.sh"
 # shellcheck source=lib/nomount-setup.sh
@@ -148,6 +150,8 @@ if [[ "$KSU_TYPE" == *susfs* ]]; then
   apply_susfs_full "$SUSFS_REF" "$SUSFS_COMMIT" "$SUSFS_PATCH_FILE"
   verify_susfs_source_integration "${KSU_KERNEL_DIR}"
 fi
+
+apply_ksu_uapi_backports
 
 if [[ "$KSU_TYPE" == *zeromount* ]]; then
   : "${ZEROMOUNT_REPO:?}"

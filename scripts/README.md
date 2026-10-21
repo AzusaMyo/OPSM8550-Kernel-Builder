@@ -30,6 +30,9 @@ Shell implementation used by the GitHub Actions workflows.
   compatibility.
 - `lib/ksu-setup.sh` checks out the selected KernelSU-compatible implementation
   at the exact resolved commit and connects it to the kernel driver tree.
+- `lib/ksu-uapi.sh` applies guarded UAPI 5/6 backports after SUSFS, preserving
+  the pinned hook ABI while implementing the newer manager interfaces. The
+  optional SukiSU preinit runner remains unavailable and is not advertised.
 - `templates/anykernel.sh` provides the slot-aware OnePlus `boot` installer used
   in release ZIPs instead of AnyKernel3's example-device script.
 - `lib/susfs-apply.sh` applies SUSFS at an exact commit, repairs explicitly
@@ -63,7 +66,12 @@ crDroid 13 coverage checks Android 17 branch inference, the pinned
 crDroid profiles, retained Android 16 selection, and Android 17 ZIP properties.
 
 The push/PR validation workflow runs Bash syntax checks, ShellCheck, these
-offline tests, and actionlint. The scheduled upstream-health workflow resolves
+offline tests, and actionlint. A separate `tests/ksu-uapi-test.sh` integration
+test composes the exact upstream drivers with SUSFS and the backports, then
+executes the real C service handlers and symbol resolver with host mocks.
+It checks restart semantics, duplicate/suffixed/module symbols, lookup argument
+errors, capability/permission wiring, idempotence, and rejection of source drift.
+The scheduled upstream-health workflow resolves
 every profile and runs a matrix covering KernelSU-Next + SUSFS + NoMount, the combined
 SukiSU Ultra + SUSFS + NoMount + KPM preset, and BakaSU + SUSFS + NoMount on
 representative SM7550, SM8450, SM8550 (including crDroid), and SM8650 sources,
