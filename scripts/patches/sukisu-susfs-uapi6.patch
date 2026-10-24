@@ -507,7 +507,7 @@ index c010d628..0dcd64dc 100644
          .cmd = 0,
          .name = NULL,
 diff --git a/uapi/supercall.h b/uapi/supercall.h
-index 0f5a5de4..fc71ac19 100644
+index 0f5a5de4..741a9d33 100644
 --- a/uapi/supercall.h
 +++ b/uapi/supercall.h
 @@ -9,7 +9,9 @@
@@ -537,7 +537,7 @@ index 0f5a5de4..fc71ac19 100644
  
  struct ksu_get_info_cmd {
      __u32 version; /* Output: KERNEL_SU_VERSION */
-@@ -148,6 +153,46 @@ struct ksu_get_sulog_fd_cmd {
+@@ -148,6 +153,48 @@ struct ksu_get_sulog_fd_cmd {
      __u32 flags; /* Input: reserved for future use, must be 0 */
  };
  
@@ -567,6 +567,8 @@ index 0f5a5de4..fc71ac19 100644
 +    KSU_EXTENSION_MAX
 +};
 +
++#define KSU_FEATURE_FLAG_SUPPORTED (1U << 0)
++
 +#define KSU_EXTENSION_GET  1u
 +#define KSU_EXTENSION_SET  2u
 +#define KSU_EXTENSION_IO   3u
@@ -584,7 +586,7 @@ index 0f5a5de4..fc71ac19 100644
  struct ksu_set_spoof_version_cmd {
      __u8 release[65]; /* Input: e.g., "5.10.115-android12-9-g00000000" */
      __u8 version[65]; /* Input: e.g., "#1 SMP PREEMPT Thu Jan 1 00:00:00 UTC 2026" */
-@@ -227,6 +272,7 @@ static const __u32 KSU_IOCTL_ADD_TRY_UMOUNT = _IOC(_IOC_WRITE, 'K', 18, 0);
+@@ -227,6 +274,7 @@ static const __u32 KSU_IOCTL_ADD_TRY_UMOUNT = _IOC(_IOC_WRITE, 'K', 18, 0);
  static const __u32 KSU_IOCTL_SET_INIT_PGRP = _IO('K', 19);
  static const __u32 KSU_IOCTL_GET_SULOG_FD = _IOW('K', 20, struct ksu_get_sulog_fd_cmd);
  static const __u32 KSU_IOCTL_DISABLE_ESCAPE_TO_ROOT = _IO('K', 21);
@@ -592,7 +594,7 @@ index 0f5a5de4..fc71ac19 100644
  // Other IOCTL command definitions
  static const __u32 KSU_IOCTL_GET_FULL_VERSION = _IOC(_IOC_READ, 'K', 100, 0);
  static const __u32 KSU_IOCTL_HOOK_TYPE = _IOC(_IOC_READ, 'K', 101, 0);
-@@ -236,4 +282,7 @@ static const __u32 KSU_IOCTL_SET_SPOOF_VERSION = _IOC(_IOC_WRITE, 'K', 104, 0);
+@@ -236,4 +284,7 @@ static const __u32 KSU_IOCTL_SET_SPOOF_VERSION = _IOC(_IOC_WRITE, 'K', 104, 0);
  static const __u32 KSU_IOCTL_SET_SPOOF_CPU = _IOC(_IOC_WRITE, 'K', 105, 0);
  static const __u32 KSU_IOCTL_KPM = _IOC(_IOC_READ | _IOC_WRITE, 'K', 200, 0);
 

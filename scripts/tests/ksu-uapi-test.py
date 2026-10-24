@@ -103,7 +103,6 @@ for kpm, susfs in ((0, 0), (1, 0), (0, 1), (1, 1)):
 #define _IOC_READ 2U
 #define _IOC_WRITE 1U
 #define _IOC(d,t,n,s) (((d)<<30)|((s)<<16)|((t)<<8)|(n))
-#define KSU_FEATURE_FLAG_SUPPORTED 1U
 static bool fail_output;
 #define copy_to_user(d,s,n) ((d) && !fail_output ? (memcpy(d,s,n),0) : 1)
 static void *last_kpm_arg;
