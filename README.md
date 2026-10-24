@@ -269,6 +269,12 @@ to GitHub Actions environment files. Every kernel, modules, root implementation,
 SUSFS, NoMount, ZeroMount patches, and AnyKernel input are resolved to exact
 commits before cloning.
 
+The manual branch menu is shared across sources: selecting LineageOS does not
+make branches such as `seventeen` or crDroid's `17.0` valid for that repository.
+Use automatic branch selection, or select an existing `lineage-*` branch that
+matches the installed ROM. Missing branches fail immediately with a source URL
+and a selection hint, before optional root or patch dependencies are queried.
+
 ## Build performance
 
 The full build passes `CC="ccache clang"` and host compiler wrappers directly

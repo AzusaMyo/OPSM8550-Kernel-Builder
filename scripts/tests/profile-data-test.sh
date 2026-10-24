@@ -406,6 +406,67 @@ SUSFS_VENDOR_FIXTURE_DIR="$(mktemp -d)"
 RESOLVER_FIXTURE_DIR="$(mktemp -d)"
 trap 'rm -f "$ANYKERNEL_FIXTURE" "$UPDATE_BINARY_FIXTURE" "$APP_STAGING_FIXTURE" "$KPM_CONFIG_FIXTURE" "$KSUN_NOMOUNT_CONFIG_FIXTURE" "$ZEROMOUNT_CONFIG_FIXTURE" "$MODULE_CONFIG_FIXTURE" "$SCMVERSION_FIXTURE"; rm -rf "$KPM_VERIFY_FIXTURE" "$NOMOUNT_FIXTURE_DIR" "$ZEROMOUNT_FIXTURE_DIR" "$EXTRACT_CERT_FIXTURE_DIR" "$ANYKERNEL_CACHE_FIXTURE_DIR" "$ANYKERNEL_PACKAGE_FIXTURE_DIR" "$ANYKERNEL_SLOT_FIXTURE_DIR" "$SUSFS_VENDOR_FIXTURE_DIR" "$RESOLVER_FIXTURE_DIR"' EXIT
 
+# Reproduce the Telegram report: LineageOS + manual seventeen must identify the
+# missing branch immediately, including when only the modules branch is absent.
+(
+  export BRANCH_FIXTURE="$RESOLVER_FIXTURE_DIR"
+  git() {
+    if [[ "$1" != ls-remote ]]; then
+      command git "$@"
+      return
+    fi
+    printf '%s\n' "$*" >> "$BRANCH_FIXTURE/git.log"
+    case "$BRANCH_FAILURE" in
+      kernel) return 2 ;;
+      modules) [[ "$*" != *-modules.git* ]] || return 2 ;;
+      network) echo 'fatal: unable to access remote' >&2; return 128 ;;
+    esac
+    printf '%s\t%s\n' 1111111111111111111111111111111111111111 "${@: -1}"
+  }
+  sleep() { :; }
+  export -f git sleep
+  for BRANCH_FAILURE in kernel modules network; do
+    export BRANCH_FAILURE
+    : > "$BRANCH_FIXTURE/git.log"
+    : > "$BRANCH_FIXTURE/env"
+    branch=lineage-24.0
+    [[ "$BRANCH_FAILURE" != kernel ]] || branch=seventeen
+    if INPUT_BUILD_PROFILE="SM8550 | OnePlus 11 / 12R | LineageOS (recommended)" \
+      INPUT_BRANCH_MODE="I want to select the branch myself" \
+      INPUT_KERNEL_BRANCH="$branch" \
+      INPUT_CLANG_CHOICE="Recommended (auto-select based on branch)" \
+      INPUT_ROOT_SOLUTION="KernelSU-Next + SUSFS + NoMount (experimental)" \
+      INPUT_BUILD_MODE="Full build (artifact only)" \
+      GITHUB_ENV="$BRANCH_FIXTURE/env" \
+      GITHUB_OUTPUT="$BRANCH_FIXTURE/output" \
+      GITHUB_STEP_SUMMARY="$BRANCH_FIXTURE/summary" \
+      bash "$RESOLVER_SCRIPT" > "$BRANCH_FIXTURE/log" 2>&1; then
+      fail "resolver accepted $BRANCH_FAILURE branch lookup failure"
+    fi
+    [[ ! -s "$BRANCH_FIXTURE/env" ]] || fail "failed resolver exported a partial profile"
+    if grep -Eq 'KernelSU|susfs4ksu|nomount' "$BRANCH_FIXTURE/git.log"; then
+      fail "invalid source branches must fail before optional dependency lookups"
+    fi
+    if [[ "$BRANCH_FAILURE" == network ]]; then
+      assert_eq 5 "$(wc -l < "$BRANCH_FIXTURE/git.log" | tr -d ' ')" "network retry count"
+      grep -Fq 'check the upstream connection and repository access' "$BRANCH_FIXTURE/log" \
+        || fail "network failure must remain distinguishable from a missing branch"
+    else
+      expected_calls=1
+      expected_repo=https://github.com/LineageOS/android_kernel_oneplus_sm8550.git
+      if [[ "$BRANCH_FAILURE" == modules ]]; then
+        expected_calls=2
+        expected_repo=https://github.com/LineageOS/android_kernel_oneplus_sm8550-modules.git
+      fi
+      assert_eq "$expected_calls" "$(wc -l < "$BRANCH_FIXTURE/git.log" | tr -d ' ')" "missing branch lookup count"
+      grep -Fq "Branch '$branch' was not found in $expected_repo" "$BRANCH_FIXTURE/log" \
+        || fail "missing branch diagnostic must name the branch and repository"
+      grep -Fq 'Use the recommended branch automatically' "$BRANCH_FIXTURE/log" \
+        || fail "missing branch diagnostic must explain automatic selection"
+    fi
+  done
+)
+
 # Exercise the real resolver with offline upstream refs, including a default
 # branch migration to 17.0 and an explicit selection of the older 16.0 branch.
 mkdir -p "$RESOLVER_FIXTURE_DIR/bin"

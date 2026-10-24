@@ -85,6 +85,10 @@ fi
 
 MODULES_BRANCH="${MODULES_BRANCH_OVERRIDE:-$KERNEL_BRANCH}"
 
+# Validate source branches before resolving optional root/patch dependencies.
+KERNEL_COMMIT="$(git_resolve_branch_commit "$KERNEL_REPO" "$KERNEL_BRANCH")"
+MODULES_COMMIT="$(git_resolve_branch_commit "$MODULES_REPO" "$MODULES_BRANCH")"
+
 resolve_clang_version "$INPUT_CLANG_CHOICE" "$KERNEL_BRANCH"
 infer_android_versions "$KERNEL_BRANCH"
 if [[ -z "$SUPPORTED_ANDROID_VERSIONS" ]]; then
@@ -195,21 +199,6 @@ if [[ "$KSU_TYPE" == *nomount* ]]; then
     echo "::error::Could not resolve NoMount branch '$NOMOUNT_REF' to a commit."
     exit 1
   fi
-fi
-
-KERNEL_COMMIT="$(git_ls_remote_retry --exit-code --heads "$KERNEL_REPO" "$KERNEL_BRANCH" \
-  | awk 'NR == 1 {print $1}')"
-if [[ ! "$KERNEL_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
-  echo "::error::Branch '$KERNEL_BRANCH' was not found in $KERNEL_REPO"
-  exit 1
-fi
-
-MODULES_COMMIT="$(git_ls_remote_retry --exit-code --heads "$MODULES_REPO" "$MODULES_BRANCH" \
-  | awk 'NR == 1 {print $1}')"
-if [[ ! "$MODULES_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
-  echo "::error::Branch '$MODULES_BRANCH' was not found in $MODULES_REPO"
-  echo "::error::The matching modules repository is required for config and Kconfig resolution."
-  exit 1
 fi
 
 # Kernel-SU/AnyKernel3 disappeared on 2026-09-15 and made every matrix entry

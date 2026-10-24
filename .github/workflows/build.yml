@@ -32,7 +32,7 @@ on:
           - Use the recommended branch automatically
           - I want to select the branch myself
       kernel_branch:
-        description: Only used in manual mode
+        description: Manual only; branch must exist in the selected source (LineageOS uses lineage-*, crDroid uses 17.0/16.0). Prefer automatic mode.
         required: true
         type: choice
         default: "17.0"
