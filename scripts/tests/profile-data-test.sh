@@ -1160,6 +1160,17 @@ printf '%s\n' 'kernel.string=dirty-cache' > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work
 printf '%s\n' stale > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/AnyKernel3/Image"
 printf '%s\n' image > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/sm8550/out/arch/arm64/boot/Image"
 printf '%s\n' image > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/sm8650/out/arch/arm64/boot/Image"
+(
+  # Packaging must require proof for the exact Image it includes.
+  . "$SCRIPT_DIR/../lib/kpm-image.sh"
+  {
+    echo patched=true
+    echo "patch_version=$KPM_PATCH_VERSION"
+    echo "tools_sha256=$KPM_TOOLS_SHA256"
+    echo "payload_sha256=$KPM_PAYLOAD_SHA256"
+    echo "image_sha256=$(sha256sum "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/sm8550/out/arch/arm64/boot/Image" | awk '{print $1}')"
+  } > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/sm8550/kpm-image-proof.txt"
+)
 printf '%s\n' sukisu-arm64-busybox > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/work/sm8550/SukiSU-Ultra/userspace/ksud/bin/aarch64/busybox"
 printf '%s\n' magisk-arm64-magiskboot > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/magisk-apk/lib/arm64-v8a/libmagiskboot.so"
 printf '%s\n' magisk-arm64-busybox > "$ANYKERNEL_PACKAGE_FIXTURE_DIR/magisk-apk/lib/arm64-v8a/libbusybox.so"

@@ -13,6 +13,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "${SCRIPT_DIR}/lib/ksu-setup.sh"
 # shellcheck source=lib/ksu-uapi.sh
 . "${SCRIPT_DIR}/lib/ksu-uapi.sh"
+# shellcheck source=lib/kpm-image.sh
+. "${SCRIPT_DIR}/lib/kpm-image.sh"
 # shellcheck source=lib/susfs-apply.sh
 . "${SCRIPT_DIR}/lib/susfs-apply.sh"
 # shellcheck source=lib/nomount-setup.sh
@@ -371,6 +373,7 @@ if [[ "$KSU_TYPE" == *KPM* ]]; then
   echo "==== KPM CONFIG SNAPSHOT ===="
   grep -E '^CONFIG_KPM=|^CONFIG_KALLSYMS(_ALL)?=' out/.config || true
   verify_kpm_binary_presence
+  patch_kpm_image out/arch/arm64/boot/Image kpm-image-proof.txt
 fi
 
 ccache --show-stats || true

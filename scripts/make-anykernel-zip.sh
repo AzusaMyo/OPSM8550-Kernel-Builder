@@ -9,6 +9,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "${SCRIPT_DIR}/lib/git-helpers.sh"
 # shellcheck source=lib/anykernel-helpers.sh
 . "${SCRIPT_DIR}/lib/anykernel-helpers.sh"
+# shellcheck source=lib/kpm-image.sh
+. "${SCRIPT_DIR}/lib/kpm-image.sh"
 
 : "${SOC:?}"
 : "${PROFILE_ID:?}"
@@ -70,6 +72,7 @@ ASSET_DIR="${GITHUB_WORKSPACE:-$(pwd)}/release-assets"
 KPM_ENABLED=false
 if [[ "$KSU_TYPE" == *KPM* ]]; then
   KPM_ENABLED=true
+  verify_kpm_image_patch "${SOC}/out/arch/arm64/boot/Image" "${SOC}/kpm-image-proof.txt"
 fi
 
 {
@@ -171,6 +174,9 @@ jq -n \
   --argjson rom_gki_module_compat "$([[ "$ROM_GKI_MODULE_COMPAT" == 1 ]] && echo true || echo false)" \
   --arg root_solution "$KSU_TYPE" \
   --argjson kpm_enabled "$KPM_ENABLED" \
+  --arg kpm_patch_version "$([[ "$KPM_ENABLED" == true ]] && echo "$KPM_PATCH_VERSION" || true)" \
+  --arg kpm_tools_sha256 "$([[ "$KPM_ENABLED" == true ]] && echo "$KPM_TOOLS_SHA256" || true)" \
+  --arg kpm_payload_sha256 "$([[ "$KPM_ENABLED" == true ]] && echo "$KPM_PAYLOAD_SHA256" || true)" \
   --arg ksu_repo "$KSU_REPO" \
   --arg ksu_ref "$KSU_REF" \
   --arg ksu_commit "$KSU_COMMIT" \
@@ -211,6 +217,9 @@ jq -n \
     rom_gki_module_compat: $rom_gki_module_compat,
     root_solution: $root_solution,
     kpm_enabled: $kpm_enabled,
+    kpm_patch_version: $kpm_patch_version,
+    kpm_tools_sha256: $kpm_tools_sha256,
+    kpm_payload_sha256: $kpm_payload_sha256,
     kernelsu_repository: $ksu_repo,
     kernelsu_ref: $ksu_ref,
     kernelsu_commit: $ksu_commit,
@@ -279,6 +288,7 @@ cat > "$ASSET_DIR/release-notes.md" <<EOF_NOTES
 - KernelSU source: ${KSU_REPO:-disabled} (${KSU_REF:-none}, ${KSU_COMMIT:-none})
 - KernelSU UAPI backport: ${KSU_UAPI_VERSION:-none} (patch SHA-256: ${KSU_UAPI_PATCH_SHA256:-none})
 - KPM: ${KPM_ENABLED}
+- KPM Image injection: $([[ "$KPM_ENABLED" == true ]] && echo "$KPM_PATCH_VERSION (verified)" || echo disabled)
 - SUSFS: ${SUSFS_NOTE}
 - NoMount: ${NOMOUNT_NOTE}
 - ZeroMount: ${ZEROMOUNT_NOTE}

@@ -91,6 +91,61 @@ print(f'PASS: UAPI {version} service start/skip, soft reboot reset, and SUSFS bo
 if version != 6:
     sys.exit(0)
 
+assert re.search(r'\.cmd = KSU_IOCTL_EXTENSION,.*?\.handler = do_extension,\s*\.perm_check = manager_or_root', dispatch, re.S)
+assert '.cmd = KSU_IOCTL_KPM,' in dispatch  # Older managers still work.
+extension_abi = header[header.index('enum ksu_extension_id {'):header.index('struct ksu_set_spoof_version_cmd {')]
+extension_ioctl = re.search(r'static const __u32 KSU_IOCTL_EXTENSION =\s*[^;]+;', header)[0]
+for kpm, susfs in ((0, 0), (1, 0), (0, 1), (1, 1)):
+    run(preamble + r'''
+#include <stddef.h>
+#define __u32 u32
+#define __u64 u64
+#define _IOC_READ 2U
+#define _IOC_WRITE 1U
+#define _IOC(d,t,n,s) (((d)<<30)|((s)<<16)|((t)<<8)|(n))
+#define KSU_FEATURE_FLAG_SUPPORTED 1U
+static bool fail_output;
+#define copy_to_user(d,s,n) ((d) && !fail_output ? (memcpy(d,s,n),0) : 1)
+static void *last_kpm_arg;
+static int do_kpm(void *arg) { last_kpm_arg = arg; return arg ? 37 : -EFAULT; }
+''' + extension_abi + extension_ioctl + function(dispatch, 'static int do_extension(') + r'''
+int main(void) {
+    _Static_assert(sizeof(struct ksu_extension_cmd) == 32, "extension wire size");
+    _Static_assert(offsetof(struct ksu_extension_cmd, user_ptr) == 24, "pointer offset");
+    assert(KSU_IOCTL_EXTENSION == 0xc0204b2cU);
+    assert(do_extension(NULL) == -EFAULT);
+    struct ksu_extension_cmd cmd = {0};
+    for (u32 id = 0; id < KSU_EXTENSION_MAX; id++) {
+        cmd = (struct ksu_extension_cmd){id, KSU_EXTENSION_GET, 255, 99, 99, 0};
+        bool supported = (id == KSU_EXTENSION_KPM && EXPECT_KPM) ||
+                         (id == KSU_EXTENSION_SUSFS && EXPECT_SUSFS);
+        assert(do_extension(&cmd) == (supported ? 0 : -EOPNOTSUPP));
+        if (supported) {
+            assert(cmd.supported == 1 && cmd.reserved == 0);
+            assert(cmd.value == (id == KSU_EXTENSION_KPM ? 1 : 0));
+            fail_output = true;
+            assert(do_extension(&cmd) == -EFAULT);
+            fail_output = false;
+        }
+        cmd.op = KSU_EXTENSION_SET; assert(do_extension(&cmd) == -EOPNOTSUPP);
+        cmd.op = KSU_EXTENSION_WIPE; assert(do_extension(&cmd) == -EOPNOTSUPP);
+        cmd.op = 99; assert(do_extension(&cmd) == -EINVAL);
+        int payload;
+        cmd.op = KSU_EXTENSION_IO; cmd.user_ptr = (u64)(uintptr_t)&payload;
+        if (id == KSU_EXTENSION_KPM && EXPECT_KPM) {
+            assert(do_extension(&cmd) == 37 && last_kpm_arg == &payload);
+            cmd.user_ptr = 0; assert(do_extension(&cmd) == -EFAULT);
+        } else {
+            assert(do_extension(&cmd) == -EOPNOTSUPP);
+        }
+    }
+    cmd.id = KSU_EXTENSION_MAX; assert(do_extension(&cmd) == -EINVAL);
+    cmd.id = UINT32_MAX; assert(do_extension(&cmd) == -EINVAL);
+}
+''', f'-DEXPECT_KPM={kpm}', f'-DEXPECT_SUSFS={susfs}',
+        *(['-DCONFIG_KPM=1'] if kpm else []), *(['-DCONFIG_KSU_SUSFS=1'] if susfs else []))
+    print(f'PASS: extension ABI, GET availability, KPM IO routing, errors; KPM={kpm}, SUSFS={susfs}')
+
 assert re.search(r'\.cmd = KSU_IOCTL_LOOKUP_SYMBOLS,.*?\.handler = do_lookup_symbols,\s*\.perm_check = only_root', dispatch, re.S)
 assert not re.search(r'cmd.flags\s*\|=\s*KSU_GET_INFO_FLAG_PREINIT', dispatch)
 runtime = (repo / 'kernel/runtime/ksud_integration.c').read_text()

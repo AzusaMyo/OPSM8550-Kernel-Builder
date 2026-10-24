@@ -33,6 +33,11 @@ Shell implementation used by the GitHub Actions workflows.
 - `lib/ksu-uapi.sh` applies guarded UAPI 5/6 backports after SUSFS, preserving
   the pinned hook ABI while implementing the newer manager interfaces. The
   optional SukiSU preinit runner remains unavailable and is not advertised.
+  Its extension-hub bridge exposes only config-backed KPM/SuSFS discovery and
+  forwards KPM IO to the existing loader, retaining legacy ioctl support.
+- `lib/kpm-image.sh` injects a checksum-pinned SukiSU KernelPatch payload after
+  full compilation, inspects the result, and binds the packaging gate to its
+  Image SHA-256. Source/config validation alone cannot prove KPM is injected.
 - `templates/anykernel.sh` provides the slot-aware OnePlus `boot` installer used
   in release ZIPs instead of AnyKernel3's example-device script.
 - `lib/susfs-apply.sh` applies SUSFS at an exact commit, repairs explicitly
@@ -71,6 +76,10 @@ test composes the exact upstream drivers with SUSFS and the backports, then
 executes the real C service handlers and symbol resolver with host mocks.
 It checks restart semantics, duplicate/suffixed/module symbols, lookup argument
 errors, capability/permission wiring, idempotence, and rejection of source drift.
+Extension tests execute the real bridge for all KPM/SuSFS config combinations,
+checking wire layout, routing, unsupported operations, and copy errors.
+`tests/kpm-image-test.sh` checks download integrity, patch failure handling,
+output inspection, and rejection of a missing or stale Image proof.
 The scheduled upstream-health workflow resolves
 every profile and runs a matrix covering KernelSU-Next + SUSFS + NoMount, the combined
 SukiSU Ultra + SUSFS + NoMount + KPM preset, and BakaSU + SUSFS + NoMount on

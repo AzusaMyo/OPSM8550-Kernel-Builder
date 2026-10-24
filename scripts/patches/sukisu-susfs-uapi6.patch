@@ -7,6 +7,10 @@ Sources: https://github.com/SukiSU-Ultra/SukiSU-Ultra/commit/7ef2dbb7fa68722c142
          https://github.com/SukiSU-Ultra/SukiSU-Ultra/commit/3b607917d2537efcd89c43004d4d8bbd8fb84d95
 License: GPL-2.0-only for kernel code; GPL-3.0-or-later for shared UAPI.
 
+Extension hub GET and KPM IO bridge matches the wire ABI at df84920b20a925fd1135530f6e403361ad494d7b;
+only CONFIG_KPM / CONFIG_KSU_SUSFS availability is advertised.
+Source: https://github.com/SukiSU-Ultra/SukiSU-Ultra/blob/df84920b20a925fd1135530f6e403361ad494d7b/uapi/extension.h
+
 diff --git a/kernel/infra/symbol_resolver.c b/kernel/infra/symbol_resolver.c
 index cb061eaa..fe65337a 100644
 --- a/kernel/infra/symbol_resolver.c
@@ -243,10 +247,10 @@ index 8ce4ef1e..960a81a8 100644
  
  #endif
 diff --git a/kernel/runtime/ksud_integration.c b/kernel/runtime/ksud_integration.c
-index 5bf84cb6..22744159 100644
+index 6f81803c..0411a0cd 100644
 --- a/kernel/runtime/ksud_integration.c
 +++ b/kernel/runtime/ksud_integration.c
-@@ -185,7 +185,8 @@ static struct file_operations fops_proxy;
+@@ -186,7 +186,8 @@ static struct file_operations fops_proxy;
  static ssize_t ksu_rc_pos = 0;
  const size_t ksu_rc_len = sizeof(KERNEL_SU_RC) - 1;
  
@@ -256,7 +260,7 @@ index 5bf84cb6..22744159 100644
  #define MODULE_RC_PATH_WATCHDOG "/metadata/watchdog/ksu/modules.rc"
  #define MODULE_RC_PATH_DEFAULT "/metadata/ksu/modules.rc"
  static char *module_rc_buf;
-@@ -194,7 +195,12 @@ static ssize_t module_rc_pos;
+@@ -195,7 +196,12 @@ static ssize_t module_rc_pos;
  
  static struct file *open_module_rc(const char **chosen_path)
  {
@@ -271,7 +275,7 @@ index 5bf84cb6..22744159 100644
          *chosen_path = MODULE_RC_PATH_WATCHDOG;
          return f;
 diff --git a/kernel/supercall/dispatch.c b/kernel/supercall/dispatch.c
-index 8b8385ef..ea5c39b4 100644
+index c010d628..0dcd64dc 100644
 --- a/kernel/supercall/dispatch.c
 +++ b/kernel/supercall/dispatch.c
 @@ -1,5 +1,8 @@
@@ -283,7 +287,7 @@ index 8b8385ef..ea5c39b4 100644
  #include <linux/slab.h>
  #include <linux/vmalloc.h>
  #include <linux/uaccess.h>
-@@ -22,6 +25,7 @@
+@@ -23,6 +26,7 @@
  #include "sulog/event.h"
  #include "sulog/fd.h"
  #include "supercall/supercall.h"
@@ -291,7 +295,7 @@ index 8b8385ef..ea5c39b4 100644
  #include "feature/uts_spoof.h"
  #include "feature/cpu_spoof.h"
  
-@@ -65,6 +69,7 @@ static int do_get_info(void __user *arg)
+@@ -60,6 +64,7 @@ static int do_get_info(void __user *arg)
      cmd.flags |= KSU_GET_INFO_FLAG_PR_BUILD;
  #endif
      cmd.features = KSU_FEATURE_MAX;
@@ -299,7 +303,7 @@ index 8b8385ef..ea5c39b4 100644
      cmd.uapi_version = KERNEL_SU_UAPI_VERSION;
  
      if (copy_to_user(arg, &cmd, sizeof(cmd))) {
-@@ -107,6 +112,7 @@ static int do_get_info_legacy(void __user *arg)
+@@ -96,6 +101,7 @@ static int do_get_info_legacy(void __user *arg)
  
  static int do_report_event(void __user *arg)
  {
@@ -307,7 +311,7 @@ index 8b8385ef..ea5c39b4 100644
      struct ksu_report_event_cmd cmd;
  
      if (copy_from_user(&cmd, arg, sizeof(cmd))) {
-@@ -116,5 +122,8 @@ static int do_report_event(void __user *arg)
+@@ -105,6 +111,9 @@ static int do_report_event(void __user *arg)
      switch (cmd.event) {
      case EVENT_POST_FS_DATA: {
          static bool post_fs_data_lock = false;
@@ -316,7 +320,8 @@ index 8b8385ef..ea5c39b4 100644
 +        services_started = false;
          if (!post_fs_data_lock) {
              post_fs_data_lock = true;
-@@ -145,6 +154,15 @@ static int do_report_event(void __user *arg)
+             pr_info("post-fs-data triggered\n");
+@@ -127,6 +136,15 @@ static int do_report_event(void __user *arg)
          on_module_mounted();
          break;
      }
@@ -332,7 +337,7 @@ index 8b8385ef..ea5c39b4 100644
      default:
          break;
      }
-@@ -701,6 +719,85 @@ static int do_disable_escape_to_root(void __user *arg)
+@@ -746,6 +764,85 @@ static int do_disable_escape_to_root(void __user *arg)
      return 0;
  }
  
@@ -418,7 +423,64 @@ index 8b8385ef..ea5c39b4 100644
  static int do_set_spoof_version(void __user *arg)
  {
      struct ksu_set_spoof_version_cmd cmd;
-@@ -1020,6 +1117,12 @@ static const struct ksu_ioctl_cmd_map ksu_ioctl_handlers[] = {
+@@ -916,6 +1013,56 @@ static int do_enable_kpm(void __user *arg)
+     return 0;
+ }
+
++/* Bridge the extension hub to the implementations in the pinned driver.
++ * Availability is config-backed; ksud additionally probes the live KPM
++ * version and SuSFS reboot ABI. Never claim unsupported hub features.
++ */
++static int do_extension(void __user *arg)
++{
++    struct ksu_extension_cmd cmd;
++
++    if (copy_from_user(&cmd, arg, sizeof(cmd)))
++        return -EFAULT;
++    if (cmd.id >= KSU_EXTENSION_MAX)
++        return -EINVAL;
++    if (cmd.op != KSU_EXTENSION_GET && cmd.op != KSU_EXTENSION_SET &&
++        cmd.op != KSU_EXTENSION_IO && cmd.op != KSU_EXTENSION_WIPE)
++        return -EINVAL;
++
++    if (cmd.op == KSU_EXTENSION_IO) {
++#ifdef CONFIG_KPM
++        if (cmd.id == KSU_EXTENSION_KPM)
++            return do_kpm((void __user *)(unsigned long)cmd.user_ptr);
++#endif
++        return -EOPNOTSUPP;
++    }
++    /* KPM and SuSFS have no sticky enable bit or wipe operation. */
++    if (cmd.op != KSU_EXTENSION_GET)
++        return -EOPNOTSUPP;
++
++    cmd.supported = 0;
++    cmd.value = 0;
++    cmd.reserved = 0;
++    switch (cmd.id) {
++#ifdef CONFIG_KPM
++    case KSU_EXTENSION_KPM:
++        cmd.supported = KSU_FEATURE_FLAG_SUPPORTED;
++        cmd.value = 1;
++        break;
++#endif
++#ifdef CONFIG_KSU_SUSFS
++    case KSU_EXTENSION_SUSFS:
++        cmd.supported = KSU_FEATURE_FLAG_SUPPORTED;
++        break;
++#endif
++    default:
++        return -EOPNOTSUPP;
++    }
++    if (copy_to_user(arg, &cmd, sizeof(cmd)))
++        return -EFAULT;
++    return 0;
++}
++
+ // IOCTL handlers mapping table
+ // clang-format off
+ static const struct ksu_ioctl_cmd_map ksu_ioctl_handlers[] = {
+@@ -1065,6 +1212,12 @@ static const struct ksu_ioctl_cmd_map ksu_ioctl_handlers[] = {
          .perm_check = only_root,
          .allow_su_session = true
      },
@@ -431,8 +493,21 @@ index 8b8385ef..ea5c39b4 100644
      {
          .cmd = KSU_IOCTL_SET_SPOOF_VERSION,
          .name = "SET_SPOOF_VERSION",
+@@ -1109,6 +1262,12 @@ static const struct ksu_ioctl_cmd_map ksu_ioctl_handlers[] = {
+         .handler = list_try_umount,
+         .perm_check = manager_or_root
+     },
++    {
++        .cmd = KSU_IOCTL_EXTENSION,
++        .name = "EXTENSION",
++        .handler = do_extension,
++        .perm_check = manager_or_root
++    },
+     {
+         .cmd = 0,
+         .name = NULL,
 diff --git a/uapi/supercall.h b/uapi/supercall.h
-index 0f5a5de4..b22a3be9 100644
+index 0f5a5de4..fc71ac19 100644
 --- a/uapi/supercall.h
 +++ b/uapi/supercall.h
 @@ -9,7 +9,9 @@
@@ -462,7 +537,7 @@ index 0f5a5de4..b22a3be9 100644
  
  struct ksu_get_info_cmd {
      __u32 version; /* Output: KERNEL_SU_VERSION */
-@@ -148,6 +153,22 @@ struct ksu_get_sulog_fd_cmd {
+@@ -148,6 +153,46 @@ struct ksu_get_sulog_fd_cmd {
      __u32 flags; /* Input: reserved for future use, must be 0 */
  };
  
@@ -482,10 +557,34 @@ index 0f5a5de4..b22a3be9 100644
 +
 +static const __u32 KSU_LOOKUP_SYMBOLS_MAX = 1024;
 +
++/* Extension hub ABI from SukiSU df84920b. Keep legacy ioctls available. */
++enum ksu_extension_id {
++    KSU_EXTENSION_KPM = 0,
++    KSU_EXTENSION_CPU_SPOOF = 1,
++    KSU_EXTENSION_UMOUNT_PATHS = 2,
++    KSU_EXTENSION_DYNAMIC_MANAGER = 3,
++    KSU_EXTENSION_SUSFS = 4,
++    KSU_EXTENSION_MAX
++};
++
++#define KSU_EXTENSION_GET  1u
++#define KSU_EXTENSION_SET  2u
++#define KSU_EXTENSION_IO   3u
++#define KSU_EXTENSION_WIPE 4u
++
++struct ksu_extension_cmd {
++    __u32 id;
++    __u32 op;
++    __u32 supported;
++    __u32 reserved;
++    __u64 value;
++    __u64 user_ptr;
++};
++
  struct ksu_set_spoof_version_cmd {
      __u8 release[65]; /* Input: e.g., "5.10.115-android12-9-g00000000" */
      __u8 version[65]; /* Input: e.g., "#1 SMP PREEMPT Thu Jan 1 00:00:00 UTC 2026" */
-@@ -227,6 +248,7 @@ static const __u32 KSU_IOCTL_ADD_TRY_UMOUNT = _IOC(_IOC_WRITE, 'K', 18, 0);
+@@ -227,6 +272,7 @@ static const __u32 KSU_IOCTL_ADD_TRY_UMOUNT = _IOC(_IOC_WRITE, 'K', 18, 0);
  static const __u32 KSU_IOCTL_SET_INIT_PGRP = _IO('K', 19);
  static const __u32 KSU_IOCTL_GET_SULOG_FD = _IOW('K', 20, struct ksu_get_sulog_fd_cmd);
  static const __u32 KSU_IOCTL_DISABLE_ESCAPE_TO_ROOT = _IO('K', 21);
@@ -493,3 +592,13 @@ index 0f5a5de4..b22a3be9 100644
  // Other IOCTL command definitions
  static const __u32 KSU_IOCTL_GET_FULL_VERSION = _IOC(_IOC_READ, 'K', 100, 0);
  static const __u32 KSU_IOCTL_HOOK_TYPE = _IOC(_IOC_READ, 'K', 101, 0);
+@@ -236,4 +282,7 @@ static const __u32 KSU_IOCTL_SET_SPOOF_VERSION = _IOC(_IOC_WRITE, 'K', 104, 0);
+ static const __u32 KSU_IOCTL_SET_SPOOF_CPU = _IOC(_IOC_WRITE, 'K', 105, 0);
+ static const __u32 KSU_IOCTL_KPM = _IOC(_IOC_READ | _IOC_WRITE, 'K', 200, 0);
+
+-#endif
+\ No newline at end of file
++static const __u32 KSU_IOCTL_EXTENSION =
++    _IOC(_IOC_READ | _IOC_WRITE, 'K', 300, sizeof(struct ksu_extension_cmd));
++
++#endif

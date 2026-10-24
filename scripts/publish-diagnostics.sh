@@ -90,4 +90,5 @@ append_file_block() {
   append_file_block "zeromount-proof.txt"        "${SOC}/zeromount-proof.txt"
   append_file_block "kpm-source-proof.txt"     "${SOC}/kpm-source-proof.txt"
   append_file_block "kpm-proof.txt"            "${SOC}/kpm-proof.txt"
+  append_file_block "kpm-image-proof.txt"      "${SOC}/kpm-image-proof.txt"
 } >> "$GITHUB_STEP_SUMMARY"

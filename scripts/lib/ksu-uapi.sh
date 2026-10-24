@@ -37,6 +37,8 @@ apply_ksu_uapi_backports() {
   grep -Eq "KERNEL_SU_UAPI_VERSION = ${expected_uapi};" "$uapi_header" || return 1
   grep -Fq 'case EVENT_SERVICES:' "$dispatch_file" || return 1
   if [[ "$expected_uapi" == 6 ]]; then
+    grep -Fq '.handler = do_extension,' "$dispatch_file" || return 1
+    grep -Fq "_IOC(_IOC_READ | _IOC_WRITE, 'K', 300, sizeof(struct ksu_extension_cmd))" "$uapi_header" || return 1
     grep -Fq '.handler = do_lookup_symbols,' "$dispatch_file" || return 1
     grep -Fq 'int __nocfi ksu_lookup_kernel_symbols(' "$repo_dir/kernel/infra/symbol_resolver.c" || return 1
     grep -Fq '"/metadata/vold/ksu/modules.rc"' "$repo_dir/kernel/runtime/ksud_integration.c" || return 1

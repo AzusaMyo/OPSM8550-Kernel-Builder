@@ -170,6 +170,13 @@ the signature checks against the final kernel artifacts. Both paths fail closed
 when expected wiring, config, objects, or symbols are missing. KPM resolver
 verification uses AOSP Clang's LTO-aware `llvm-nm` on the compiled resolver
 object instead of GNU `nm` on the aggregate LTO intermediate.
+Full KPM builds also inject the implementation into the final `Image` with
+SukiSU KernelPatch **0.13.9**. Both `kptools-linux` and `kpimg` are SHA-256
+pinned. The build requires a changed Image and `patched=true` from the image
+inspector; packaging checks the resulting Image hash against
+`kpm-image-proof.txt`. `CONFIG_KPM=y` and loader symbols alone only establish
+the hook stubs, not a working KPM implementation. Validation-only builds do
+not perform this final Image injection.
 
 BakaSU SUSFS presets pin `fa8311f632a215b5381ec644627c6198d1e8a13e`,
 which passed a full batch build on September 27. Its latest `main` suspends
@@ -190,7 +197,9 @@ build succeeds. The pipeline now backports the actual interfaces:
   root-only batch symbol lookup, and `/metadata/vold/ksu/modules.rc` support,
   from upstream commits `7ef2dbb7` and `3b607917`. The optional preinit runner
   is disabled and its capability flag stays clear. The older KPM interfaces
-  are retained; newer extension-hub features are outside this backport.
+  are retained. The extension-hub ioctl also bridges KPM discovery/control and
+  SuSFS discovery to the pinned implementations. CPU spoof, umount paths, and
+  dynamic-manager hub operations remain unsupported by this bridge.
 
 Backports apply only to the exact tested driver commits; unknown patch drift
 fails the build. `build-info.json` and release notes record the resulting UAPI
@@ -200,6 +209,15 @@ Older downloaded ZIPs still contain UAPI 4 and must be replaced by a new build;
 updating the manager alone does not update an embedded kernel driver.
 Device boot, root grants, and module installation require device testing after
 flashing the device/ROM-matched package.
+
+If the home screen reports SuSFS v2.3.0 but the **Extension features** page
+reports no support, the running driver may have UAPI 6 without the extension
+hub bridge. For example, release `kernel-build-39906179867-1` contains this
+older backport and an unpatched KPM Image. Rebuild with the updated pipeline
+and flash the device/ROM-matched ZIP, then reboot. Updating the manager or
+reinstalling modules cannot add these kernel interfaces. Current managers
+also perform live KPM-version and SuSFS-version probes before displaying
+support; the bridge does not override those checks.
 
 Patch/config validation uses the runner's distribution Clang, LLD, and LLVM
 binutils; full builds use the selected pinned AOSP toolchain.
