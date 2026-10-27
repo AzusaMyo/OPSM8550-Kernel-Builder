@@ -132,6 +132,7 @@ Available workflow presets:
 | `KernelSU-Next + SUSFS + NoMount (experimental)` | KernelSU-Next with SUSFS and NoMount | Experimental |
 | `KernelSU-Next + SUSFS + ZeroMount (experimental)` | KernelSU-Next with SUSFS and ZeroMount | Experimental |
 | `KowSU` | KowSU | Supported |
+| `FinaSU (experimental)` | FinaSU, built into the kernel | Experimental |
 | `SukiSU Ultra + KPM (experimental)` | SukiSU Ultra with KPM | Experimental |
 | `SukiSU Ultra + SUSFS + KPM (experimental)` | SukiSU Ultra with SUSFS and KPM | Experimental |
 | `SukiSU Ultra + SUSFS + ZeroMount + KPM (experimental)` | SukiSU Ultra with SUSFS, ZeroMount, and KPM | Experimental |
@@ -140,6 +141,17 @@ Available workflow presets:
 | `BakaSU + SUSFS` | BakaSU with SUSFS | Supported |
 | `BakaSU + SUSFS + ZeroMount (experimental)` | BakaSU with SUSFS and ZeroMount | Experimental |
 | `BakaSU + SUSFS + NoMount (experimental)` | BakaSU with SUSFS and NoMount | Experimental |
+
+FinaSU is fetched from [`LyraVoid/FinaSU`](https://github.com/LyraVoid/FinaSU)
+at an exact commit resolved from `master`. Select `FinaSU (experimental)` in
+the root dropdown and use the matching FinaSU manager. This preset enables
+the driver's KPROBES/EXT4 dependencies and manager support. SUSFS, KPM, and
+the builder's NoMount/ZeroMount integrations are not enabled for this preset;
+FinaSU's own manager/userspace features remain managed by FinaSU. The optional
+preinit runner follows upstream's header availability check. Upstream-health
+includes driver object smoke builds on representative 5.10, 5.15, and 6.1
+profiles. Full kernel compilation and device boot still need validation before
+this preset can be considered stable.
 
 BakaSU (formerly ReSukiSU) is fetched from
 [`Baka-SU/BakaSU`](https://github.com/Baka-SU/BakaSU) at an exact commit (resolved from `main` without SUSFS, or pinned for SUSFS).

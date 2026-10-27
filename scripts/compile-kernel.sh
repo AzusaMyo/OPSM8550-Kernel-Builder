@@ -206,6 +206,14 @@ fi
 if [[ "$KSU_TYPE" != "None" ]]; then
   require_config_enabled out/.config CONFIG_KSU
 fi
+if [[ "$KSU_TYPE" == FinaSU ]]; then
+  for key in CONFIG_KPROBES CONFIG_EXT4_FS CONFIG_KALLSYMS CONFIG_KSU_DYNAMIC_MANAGER; do
+    require_config_enabled out/.config "$key"
+  done
+  for key in CONFIG_KSU_SUSFS CONFIG_KSU_DISABLE_MANAGER CONFIG_KSU_DISABLE_POLICY; do
+    require_config_disabled out/.config "$key"
+  done
+fi
 if [[ "$KSU_TYPE" == *susfs* ]]; then
   require_config_enabled  out/.config CONFIG_KSU_SUSFS
   require_config_enabled  out/.config CONFIG_KSU_SUSFS_SUS_MAP
@@ -248,6 +256,9 @@ if [[ "$BUILD_MODE" == "Patch/config validation only" ]]; then
   COMPILE_SECONDS=$(($(date +%s) - COMPILE_STARTED_AT))
 
   SMOKE_TARGETS=()
+  if [[ "$KSU_TYPE" == FinaSU ]]; then
+    SMOKE_TARGETS+=("${KSU_DRIVER_DIR}/kernelsu/")
+  fi
   if [[ "$KSU_TYPE" == *susfs* ]]; then
     SMOKE_TARGETS+=(
       fs/susfs.o
@@ -293,7 +304,7 @@ if [[ "$BUILD_MODE" == "Patch/config validation only" ]]; then
     fi
     if ! make -j"$(nproc)" "${MAKE_ARGS[@]}" "${SMOKE_TARGETS[@]}" 2>&1 | tee integration-smoke.log; then
       COMPILE_SECONDS=$((COMPILE_SECONDS + $(date +%s) - COMPILE_STARTED_AT))
-      echo "::error::SUSFS/NoMount/ZeroMount/KPM integration object smoke compile failed."
+      echo "::error::KernelSU/SUSFS/NoMount/ZeroMount/KPM integration object smoke compile failed."
       exit 1
     fi
     COMPILE_SECONDS=$((COMPILE_SECONDS + $(date +%s) - COMPILE_STARTED_AT))

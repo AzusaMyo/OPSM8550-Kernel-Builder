@@ -186,6 +186,21 @@ assert_eq "lunarisos" "$SOURCE_SLUG" "LunarisOS source slug"
 
 resolve_root_solution "BakaSU + SUSFS"
 assert_eq "BakaSU-with-susfs" "$KSU_TYPE" "root mapping"
+resolve_root_solution "FinaSU (experimental)"
+assert_eq FinaSU "$KSU_TYPE" "FinaSU root mapping"
+grep -Fxq '          - FinaSU (experimental)' "$WORKFLOW_FILE" \
+  || fail "workflow is missing FinaSU"
+(
+  # shellcheck source=../lib/ksu-setup.sh
+  . "$KSU_SETUP_SCRIPT"
+  KSU_COMMIT=3333333333333333333333333333333333333333
+  setup_kernelsu_repo() {
+    assert_eq LyraVoid "$1" "FinaSU checkout owner"
+    assert_eq FinaSU "$2" "FinaSU checkout repository"
+    assert_eq "$KSU_COMMIT" "$3" "FinaSU checkout exact commit"
+  }
+  install_ksu_variant "$KSU_TYPE"
+)
 for bakasu_suffix in "" " + SUSFS" " + SUSFS + NoMount (experimental)" " + SUSFS + ZeroMount (experimental)"; do
   resolve_root_solution "BakaSU${bakasu_suffix}"
   bakasu_type="$KSU_TYPE"
@@ -483,12 +498,37 @@ commit=1111111111111111111111111111111111111111
 for argument in "$@"; do
   if [[ "$argument" == *-modules.git ]]; then
     commit=2222222222222222222222222222222222222222
+  elif [[ "$argument" == https://github.com/LyraVoid/FinaSU.git ]]; then
+    [[ "${@: -1}" == refs/heads/master ]] || exit 2
+    commit=3333333333333333333333333333333333333333
   fi
 done
 printf '%s\trefs/heads/%s\n' "$commit" "${@: -1}"
 EOF
 chmod +x "$RESOLVER_FIXTURE_DIR/bin/git"
 RESOLVER_REAL_GIT="$(command -v git)"
+# Verify FinaSU uses its own resolved commit and leaves patch dependencies empty.
+: > "$RESOLVER_FIXTURE_DIR/env"
+PATH="$RESOLVER_FIXTURE_DIR/bin:$PATH" \
+RESOLVER_REAL_GIT="$RESOLVER_REAL_GIT" \
+INPUT_BUILD_PROFILE='SM8550 | OnePlus 11 / 12R | LineageOS (recommended)' \
+INPUT_BRANCH_MODE=manual \
+INPUT_KERNEL_BRANCH=lineage-23.0 \
+INPUT_CLANG_CHOICE='Recommended (auto-select based on branch)' \
+INPUT_ROOT_SOLUTION='FinaSU (experimental)' \
+INPUT_BUILD_MODE='Patch/config validation only' \
+GITHUB_ENV="$RESOLVER_FIXTURE_DIR/env" \
+GITHUB_OUTPUT="$RESOLVER_FIXTURE_DIR/output" \
+GITHUB_STEP_SUMMARY="$RESOLVER_FIXTURE_DIR/summary" \
+  bash "$RESOLVER_SCRIPT" > "$RESOLVER_FIXTURE_DIR/log"
+for expected_field in \
+  KSU_TYPE=FinaSU KSU_REPO=https://github.com/LyraVoid/FinaSU.git KSU_REF=master \
+  KSU_COMMIT=3333333333333333333333333333333333333333 \
+  SUSFS_COMMIT= NOMOUNT_COMMIT= ZEROMOUNT_COMMIT=; do
+  grep -Fxq "$expected_field" "$RESOLVER_FIXTURE_DIR/env" \
+    || fail "FinaSU resolver missing $expected_field"
+done
+
 for crdroid_profile in \
   "SM7550 | OnePlus Nord CE4 | crDroid (recommended for crDroid)" \
   "SM8550 | OnePlus 11 / 12R | crDroid" \
@@ -1032,6 +1072,23 @@ chmod +x "$KPM_VERIFY_FIXTURE/toolchain/llvm-nm"
   verify_kpm_binary_presence >/dev/null
   grep -Fq 'T find_kernel_symbol_exact' kpm-proof.txt \
     || fail "KPM proof does not record the leaf resolver definition"
+)
+
+(
+  finasu_config="$RESOLVER_FIXTURE_DIR/finasu.config"
+  printf '%s\n' CONFIG_KSU=m CONFIG_KPROBES=n CONFIG_EXT4_FS=m \
+    CONFIG_KSU_SUSFS=y CONFIG_KSU_DISABLE_MANAGER=y CONFIG_KSU_DISABLE_POLICY=y > "$finasu_config"
+  KSU_TYPE=FinaSU
+  apply_variant_configs "$finasu_config"
+  for key in CONFIG_KSU CONFIG_KPROBES CONFIG_EXT4_FS CONFIG_KALLSYMS CONFIG_KSU_DYNAMIC_MANAGER; do
+    require_config_enabled "$finasu_config" "$key"
+  done
+  for key in CONFIG_KSU_SUSFS CONFIG_KSU_DISABLE_MANAGER CONFIG_KSU_DISABLE_POLICY; do
+    grep -Fxq "# $key is not set" "$finasu_config" || fail "FinaSU must disable $key"
+  done
+  config_hash="$(sha256sum "$finasu_config" | cut -d' ' -f1)"
+  apply_variant_configs "$finasu_config"
+  assert_eq "$config_hash" "$(sha256sum "$finasu_config" | cut -d' ' -f1)" "FinaSU config idempotence"
 )
 
 KSU_TYPE="SukiSU-Ultra-with-susfs-nomount-KPM"

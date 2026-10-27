@@ -66,6 +66,9 @@ Shell implementation used by the GitHub Actions workflows.
 `tests/profile-data-test.sh` verifies all supported profile mappings and keeps
 the workflow dropdown synchronized with the mapping library. It also checks
 representative root, Clang, KPM, SUSFS, NoMount, and Android version decisions.
+FinaSU coverage checks exact `master` resolution, checkout routing, required
+driver/manager config, and exclusion of the existing SUSFS patch pipeline.
+Its upstream-health entries compile the driver on 5.10, 5.15, and 6.1 profiles.
 crDroid 13 coverage checks Android 17 branch inference, the pinned
 `clang-r584948` toolchain, automatic/manual resolver output for all three
 crDroid profiles, retained Android 16 selection, and Android 17 ZIP properties.

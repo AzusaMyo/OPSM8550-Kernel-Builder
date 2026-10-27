@@ -87,6 +87,10 @@ install_ksu_variant() {
       : "${KSU_COMMIT:?KSU_COMMIT must be resolved for KowSU}"
       setup_kernelsu_repo "KOWX712" "KernelSU" "$KSU_COMMIT"
       ;;
+    "FinaSU")
+      : "${KSU_COMMIT:?KSU_COMMIT must be resolved for FinaSU}"
+      setup_kernelsu_repo "LyraVoid" "FinaSU" "$KSU_COMMIT"
+      ;;
     "KernelSU-Next")
       : "${KSU_COMMIT:?KSU_COMMIT must be resolved for KernelSU-Next}"
       setup_kernelsu_repo "KernelSU-Next" "KernelSU-Next" "$KSU_COMMIT"
