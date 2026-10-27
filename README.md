@@ -145,7 +145,13 @@ Available workflow presets:
 FinaSU is fetched from [`LyraVoid/FinaSU`](https://github.com/LyraVoid/FinaSU)
 at an exact commit resolved from `master`. Select `FinaSU (experimental)` in
 the root dropdown and use the matching FinaSU manager. This preset enables
-the driver's KPROBES/EXT4 dependencies and manager support. SUSFS, KPM, and
+the driver's KPROBES/EXT4 dependencies and manager support. It pins the official
+v1.2.1 manager's signing certificate (`2d89b50a…5d448458`, 716 bytes) in the
+release signature slot, as required by FinaSU's upstream release workflow.
+Both post-build verification and packaging check that the final Image contains
+this certificate hash; `build-info.json` records it. A build using only the
+upstream default certificate can boot but reject FinaSU Manager as not installed.
+SUSFS, KPM, and
 the builder's NoMount/ZeroMount integrations are not enabled for this preset;
 FinaSU's own manager/userspace features remain managed by FinaSU. The optional
 preinit runner follows upstream's header availability check. Upstream-health

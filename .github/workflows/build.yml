@@ -353,6 +353,7 @@ jobs:
             ${{ github.workspace }}/${{ steps.resolve.outputs.soc }}/build.log
             ${{ github.workspace }}/${{ steps.resolve.outputs.soc }}/build-resources.log
             ${{ github.workspace }}/${{ steps.resolve.outputs.soc }}/integration-smoke.log
+            ${{ github.workspace }}/${{ steps.resolve.outputs.soc }}/finasu-manager-proof.txt
             ${{ github.workspace }}/${{ steps.resolve.outputs.soc }}/susfs-source-proof.txt
             ${{ github.workspace }}/${{ steps.resolve.outputs.soc }}/susfs-hook-proof.txt
             ${{ github.workspace }}/${{ steps.resolve.outputs.soc }}/susfs-proof.txt

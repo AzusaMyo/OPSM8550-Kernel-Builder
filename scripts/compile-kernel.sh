@@ -11,6 +11,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "${SCRIPT_DIR}/lib/kernel-helpers.sh"
 # shellcheck source=lib/ksu-setup.sh
 . "${SCRIPT_DIR}/lib/ksu-setup.sh"
+# shellcheck source=lib/finasu-manager.sh
+. "${SCRIPT_DIR}/lib/finasu-manager.sh"
 # shellcheck source=lib/ksu-uapi.sh
 . "${SCRIPT_DIR}/lib/ksu-uapi.sh"
 # shellcheck source=lib/kpm-image.sh
@@ -130,6 +132,8 @@ if [[ -n "$KERNEL_MAKE_FLAGS" ]]; then
   echo "[config] Device make flags: ${KERNEL_MAKE_FLAG_ARRAY[*]}"
 fi
 
+configure_finasu_manager
+
 ccache --zero-stats || true
 CONFIG_STARTED_AT="$(date +%s)"
 BUILD_PHASE="source integration"
@@ -140,6 +144,9 @@ EXTRACT_CERT_SOURCE="$(detect_extract_cert_source)" || {
 }
 repair_extract_cert_key_pass_guard "$EXTRACT_CERT_SOURCE"
 install_ksu_variant "${KSU_TYPE}"
+if [[ "$KSU_TYPE" == FinaSU ]]; then
+  python3 "${SCRIPT_DIR}/tests/finasu-manager-test.py" "$KSU_KERNEL_DIR"
+fi
 
 if [[ "$KSU_TYPE" == *KPM* ]]; then
   verify_kpm_source_integration "${KSU_KERNEL_DIR}"
@@ -364,6 +371,9 @@ if ! strings out/arch/arm64/boot/Image | grep -F "Linux version ${KERNEL_RELEASE
   exit 1
 fi
 echo "[+] Kernel release identity verified: ${KERNEL_RELEASE}"
+if [[ "$KSU_TYPE" == FinaSU ]]; then
+  verify_finasu_manager_binary out/arch/arm64/boot/Image finasu-manager-proof.txt
+fi
 if [[ "$KSU_TYPE" == *susfs* ]]; then
   echo "==== SUSFS CONFIG SNAPSHOT ===="
   grep -E '^CONFIG_KSU_SUSFS|^CONFIG_KSU_MANUAL_HOOK|^CONFIG_TMPFS_XATTR=|^CONFIG_NOMOUNT=' out/.config || true

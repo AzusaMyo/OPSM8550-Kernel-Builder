@@ -69,6 +69,14 @@ representative root, Clang, KPM, SUSFS, NoMount, and Android version decisions.
 FinaSU coverage checks exact `master` resolution, checkout routing, required
 driver/manager config, and exclusion of the existing SUSFS patch pipeline.
 Its upstream-health entries compile the driver on 5.10, 5.15, and 6.1 profiles.
+`tests/finasu-manager-test.sh` runs the real pinned FinaSU Kbuild and certificate
+matcher against its public v1.2.1 release certificate. It reproduces rejection
+with the upstream default key, verifies our release-slot arguments authorize
+FinaSU while other preset managers stay untrusted, and rejects an Image missing
+the release certificate hash. Each FinaSU build also runs this matcher test
+against the driver revision it actually checked out, before compiling the
+kernel. `lib/finasu-manager.sh` supplies the release identity to every make
+invocation; full builds and packaging independently verify the final Image.
 crDroid 13 coverage checks Android 17 branch inference, the pinned
 `clang-r584948` toolchain, automatic/manual resolver output for all three
 crDroid profiles, retained Android 16 selection, and Android 17 ZIP properties.
