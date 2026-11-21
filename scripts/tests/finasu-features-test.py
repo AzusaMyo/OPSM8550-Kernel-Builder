@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the real SUSFS command dispatcher and verify the NoMount v22 ABI."""
+"""Run the real SUSFS command dispatcher and verify the NoMount v23 ABI."""
 import os
 from pathlib import Path
 import re
@@ -40,8 +40,8 @@ nomount = (repo / "userspace/nomount/kernel/src/nomount.h").read_text()
 wire = "\n".join(re.search(rf"struct {name} \{{.*?\}} __attribute__\(\(packed\)\);", nomount, re.S).group()
                  for name in ("nm_payload", "nm_rule_hdr", "nm_del_hdr"))
 rust = (repo / "userspace/ksud/src/nomount.rs").read_text()
-assert 'NOMOUNT_BASE_VERSION "22"' in nomount
-assert "MIN_API_VERSION: u32 = 22" in rust
+assert 'NOMOUNT_BASE_VERSION "23"' in nomount
+assert "MIN_API_VERSION: u32 = 23" in rust
 rule_size = int(re.search(r"RULE_HEADER_SIZE: usize = (\d+)", rust)[1])
 delete_size = int(re.search(r"DELETE_HEADER_SIZE: usize = (\d+)", rust)[1])
 
@@ -121,7 +121,7 @@ int main(void) {{
         ], cwd=root, check=True, stdout=subprocess.DEVNULL)
         assert (fs / "nomount").resolve() == repo / "userspace/nomount/kernel/src"
         assert (fs / "Makefile").read_text().count('obj-$(CONFIG_NOMOUNT) += nomount/') == 1
-        assert "nomount_version=22\n" in (root / "nomount-source-proof.txt").read_text()
+        assert "nomount_version=23\n" in (root / "nomount-source-proof.txt").read_text()
 
     header = repo / "userspace/nomount/kernel/src/nomount.h"
     original = header.read_bytes()
@@ -138,4 +138,4 @@ int main(void) {{
     finally:
         header.write_bytes(original)
 
-print(f"PASS: {ref}: SUSFS command routing, root checks, FD cleanup, NoMount v22 ABI and built-in wiring")
+print(f"PASS: {ref}: SUSFS command routing, root checks, FD cleanup, NoMount v23 ABI and built-in wiring")

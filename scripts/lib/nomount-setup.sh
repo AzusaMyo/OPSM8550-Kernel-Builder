@@ -9,10 +9,10 @@ detect_nomount_version() {
   local header="${source_dir}/nomount.h"
   local version
   local commit_count
+  local checkout_dir
+  local count_format=""
 
-  # Older releases use a literal; v21 composes the base version with the
-  # checkout's commit count passed by its Makefile. Match the compiled value,
-  # including the count from our shallow, exact-commit checkout.
+  # Match the kernel version string, including the count from shallow checkouts.
   version="$(sed -nE 's/^[[:space:]]*#define[[:space:]]+NOMOUNT_VERSION[[:space:]]+"([^"]+)"[[:space:]]*$/\1/p' "$header" | head -n 1)"
   if [[ -n "$version" ]]; then
     printf '%s\n' "$version"
@@ -23,10 +23,25 @@ detect_nomount_version() {
   [[ -n "$version" ]] || return 1
   grep -Eq '^[[:space:]]*#define[[:space:]]+NOMOUNT_VERSION[[:space:]]+NOMOUNT_BASE_VERSION[[:space:]]*$' "$header" || return 1
   if grep -Eq '^[[:space:]]*#define[[:space:]]+NOMOUNT_VERSION[[:space:]]+NOMOUNT_BASE_VERSION[[:space:]]+"-"[[:space:]]+NOMOUNT_COMMIT_COUNT[[:space:]]*$' "$header"; then
+    count_format=hyphen
+  elif grep -Eq '^[[:space:]]*#define[[:space:]]+NOMOUNT_VERSION[[:space:]]+""NOMOUNT_BASE_VERSION" \("NOMOUNT_COMMIT_COUNT"\)"[[:space:]]*$' "$header"; then
+    # Newer Kbuilds only pass a count for a standalone NoMount checkout.
+    # When the driver is vendored, the version is the base protocol number.
+    checkout_dir="$(git -C "$source_dir" rev-parse --show-toplevel 2>/dev/null)" || checkout_dir=""
+    if [[ -n "$checkout_dir" && -d "$checkout_dir/.git" ]] &&
+       git -C "$checkout_dir" remote get-url origin 2>/dev/null | grep -q 'nomount'; then
+      count_format=parentheses
+    fi
+  fi
+  if [[ -n "$count_format" ]]; then
     grep -Fq 'ccflags-y += -DNOMOUNT_COMMIT_COUNT=\"$(NOMOUNT_COMMITS)\"' "${source_dir}/Makefile" || return 1
     commit_count="$(git -C "$source_dir" rev-list --count HEAD)" || return 1
     [[ "$commit_count" =~ ^[0-9]+$ ]] || return 1
-    version="${version}-${commit_count}"
+    if [[ "$count_format" == hyphen ]]; then
+      version="${version}-${commit_count}"
+    else
+      version="${version} (${commit_count})"
+    fi
   fi
   printf '%s\n' "$version"
 }

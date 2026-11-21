@@ -65,8 +65,8 @@ Shell implementation used by the GitHub Actions workflows.
   dedicated KPM, SUSFS, NoMount, and ZeroMount proofs. Full builds also verify
   that the final `Image` release suffix identifies the pinned kernel commit.
   SUSFS validation also checks exec/SELinux object references against global
-  KernelSU/SUSFS definitions with the active toolchain's `llvm-nm`, so missing
-  hook symbols fail before a full kernel link.
+  KernelSU, SUSFS, and SELinux service definitions with the active toolchain's
+  `llvm-nm` to catch missing hook symbols before the final kernel link.
 
 ## Tests
 
@@ -78,7 +78,7 @@ driver/manager config, and exclusion of the existing SUSFS patch pipeline.
 Its upstream-health entries compile the driver on 5.10, 5.15, and 6.1 profiles.
 `tests/finasu-manager-test.sh` runs the real pinned FinaSU Kbuild and certificate
 matcher against its public release certificate (unchanged from v1.2.1 to
-v1.4.5). It reproduces rejection
+v1.6.5). It reproduces rejection
 with the upstream default key, verifies our release-slot arguments authorize
 FinaSU while other preset managers stay untrusted, and rejects an Image missing
 the release certificate hash. Each FinaSU build also runs this matcher test
@@ -102,7 +102,7 @@ the pinned driver. It checks Kconfig/command coverage, executes the real SUSFS
 reboot dispatcher (including root restrictions and FD cleanup), and checks the
 NoMount add/list/delete wire layouts against ksud. NoMount source integration
 is exercised in both `fs/` and `common/fs/` layouts with idempotence checks.
-`install_finasu_nomount` verifies the vendored v22 source digests and reuses the
+`install_finasu_nomount` verifies the vendored NoMount source digests and reuses the
 shared NoMount Kconfig/Makefile wiring. It avoids a floating driver update that
 could silently break FinaSU's userspace rule protocol.
 crDroid 13 coverage checks Android 17 branch inference, the pinned

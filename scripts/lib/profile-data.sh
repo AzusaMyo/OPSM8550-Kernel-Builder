@@ -355,6 +355,27 @@ su_session_compatible_susfs_commit() {
   esac
 }
 
+kernelsu_next_susfs_commit() {
+  case "$1" in
+    gki-android13-5.10) echo d480b312d650601888550529695706f4a112e29e ;;
+    gki-android13-5.15) echo c1d1da42b74771944207ec45aaceff9c57e84985 ;;
+    gki-android14-5.15) echo a293ab199ff84b7482d57ece06b4199411cd5c01 ;;
+    gki-android14-6.1) echo f76b81f2a6bf98e4029cc0c823c054edbec29803 ;;
+    *) echo "::error::No KernelSU-Next-compatible SUSFS revision for $1" >&2; return 1 ;;
+  esac
+}
+
+kernelsu_next_zeromount_susfs_commit() {
+  # The pinned ZeroMount patches expect the v2.3.0 VFS layout.
+  case "$1" in
+    gki-android13-5.10) echo cfa82d53371b2dacb3ed79e31cb62a9cc349b5d5 ;;
+    gki-android13-5.15) echo e30f1502a870434150efb16bd4a0d33277d7da57 ;;
+    gki-android14-5.15) echo 251a2ec4038ba241609fb4ad032ea0990cffa691 ;;
+    gki-android14-6.1) echo ee155a1ad4219804a7c54cb39dd4fa1b5c2a3fa4 ;;
+    *) echo "::error::No ZeroMount-compatible KernelSU-Next SUSFS revision for $1" >&2; return 1 ;;
+  esac
+}
+
 infer_android_versions() {
   local branch="$1"
 

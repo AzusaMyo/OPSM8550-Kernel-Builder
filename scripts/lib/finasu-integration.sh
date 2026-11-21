@@ -50,20 +50,19 @@ PY
 install_finasu_nomount() {
   local source_dir="$KSU_REPO_DIR/userspace/nomount/kernel/src"
   [[ "$(git -C "$KSU_REPO_DIR" rev-parse HEAD)" == "$FINASU_COMMIT" && "$NOMOUNT_COMMIT" == "$FINASU_COMMIT" ]] || return 1
-  # These are the byte-identical v2.2.0 sources recorded in FinaSU's UPSTREAM.md.
-  # Do not follow NoMount master: its wire ABI may outgrow the paired ksud.
+  # These are FinaSU's reviewed v2.3.1 sources, paired with the ksud wire ABI.
   (
     cd "$source_dir" || exit 1
     sha256sum --check <<'SUMS'
-25452d96684d066446fbd1b433f4fdeab1c5b0ade11701d9b46bb8dfb5acfc1b  nomount.c
-8f15ffcb4b998d8a05219b793cf22c0e25a383296376fc49a331e07bc7c93766  nomount.h
-1df7ad3589a282128f797f7a46b28aee315d080550aae26b681a898f11c7abc7  Kconfig
+041c09ba94ab76ab67c25241bda563dd8cdbb6567e476c557909108088cf2813  nomount.c
+a396b6469fc4912e9d93179ace982468dc466f8b2a83ce6e4b606857b015941c  nomount.h
+68e1d5a393eed6026b071149d0998d1652a598dfbcd4e4cd98f23e178337dbca  Kconfig
 1191fe9ef8e2f3549419fd90a118fbe3d11fc02a04b6353bae0e81be27e03e62  Makefile
 SUMS
   ) || return 1
   wire_nomount_source "$source_dir" "$NOMOUNT_REF" "$NOMOUNT_COMMIT"
-  [[ "$NOMOUNT_VERSION" == 22 ]] || {
-    echo '::error::FinaSU requires its vendored NoMount API v22 driver.'
+  [[ "$NOMOUNT_VERSION" == "$FINASU_NOMOUNT_API" ]] || {
+    echo "::error::FinaSU requires its vendored NoMount API v$FINASU_NOMOUNT_API driver."
     return 1
   }
 }

@@ -127,10 +127,12 @@ case "$KSU_TYPE" in
     KSU_REF="dev"
     ;;
   KernelSU-Next-with-susfs|KernelSU-Next-with-susfs-nomount|KernelSU-Next-with-susfs-zeromount)
-    # The official dev branch does not carry the KernelSU-side SUSFS hooks.
-    # This branch tracks it and provides the matching in-tree integration.
     KSU_REPO="https://github.com/pershoot/KernelSU-Next.git"
     KSU_REF="dev-susfs"
+    KSU_COMMIT="39b15dead6fa806cb3582f866b081fa1d9e1c9e4"
+    if [[ "$KSU_TYPE" == *zeromount ]]; then
+      KSU_COMMIT="83349468baf83112f7ed327d6f41ed443f443058"
+    fi
     ;;
   KowSU)
     KSU_REPO="https://github.com/KOWX712/KernelSU.git"
@@ -182,15 +184,19 @@ if [[ "$KSU_TYPE" == *susfs* ]]; then
   resolve_susfs_settings "$SOC" "$KERNEL_BRANCH"
   case "$KSU_TYPE" in
     FinaSU-with-susfs|FinaSU-with-susfs-nomount)
+      SUSFS_MIN_VERSION="2.4.0"
       SUSFS_COMMIT="$(finasu_susfs_commit "$SUSFS_REF")"
+      ;;
+    KernelSU-Next-with-susfs-zeromount)
+      SUSFS_COMMIT="$(kernelsu_next_zeromount_susfs_commit "$SUSFS_REF")"
+      ;;
+    KernelSU-Next-with-susfs*)
+      SUSFS_MIN_VERSION="2.4.0"
+      SUSFS_COMMIT="$(kernelsu_next_susfs_commit "$SUSFS_REF")"
       ;;
     SukiSU-Ultra-with-susfs-KPM|SukiSU-Ultra-with-susfs-nomount-KPM|SukiSU-Ultra-with-susfs-zeromount-KPM|BakaSU-with-susfs|BakaSU-with-susfs-nomount|BakaSU-with-susfs-zeromount)
       SUSFS_COMMIT="$(su_session_compatible_susfs_commit "$SUSFS_REF")"
       echo "::notice::Using su-session-compatible SUSFS v2.3.0 commit $SUSFS_COMMIT for $SUSFS_REF ($KSU_TYPE)."
-      ;;
-    *)
-      SUSFS_COMMIT="$(git_ls_remote_retry --exit-code "$SUSFS_REPO" "refs/heads/${SUSFS_REF}" \
-        | awk 'NR == 1 {print $1}')"
       ;;
   esac
   if [[ ! "$SUSFS_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
@@ -219,7 +225,7 @@ NOMOUNT_REF=""
 NOMOUNT_COMMIT=""
 if [[ "$KSU_TYPE" == *nomount* ]]; then
   if [[ "$KSU_TYPE" == FinaSU* ]]; then
-    # Use FinaSU's vendored v22 driver, matching its Manager/ksud wire ABI.
+    # Match the Manager/ksud wire ABI with FinaSU's vendored driver.
     NOMOUNT_REPO="$KSU_REPO"
     NOMOUNT_REF="$FINASU_RELEASE:userspace/nomount"
     NOMOUNT_COMMIT="$FINASU_COMMIT"

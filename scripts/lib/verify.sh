@@ -269,15 +269,14 @@ verify_susfs_binary_presence() {
   } | tee susfs-proof.txt
 }
 
-# A partial Kbuild succeeds with unresolved hooks. Compare the kernel callers
-# with global driver definitions so validation catches ABI drift before Image's
-# final link, including LLVM bitcode objects when LTO is enabled.
+# A partial Kbuild succeeds with unresolved hooks. Check for global definitions
+# in both kernel and driver objects, including LLVM bitcode when LTO is enabled.
 verify_susfs_hook_linkage() {
   local llvm_nm="${CLANG_ROOT:?}/llvm-nm"
   local driver_objects="out/${KSU_DRIVER_DIR:?}/kernelsu"
   local object_file definitions required missing
   local caller_objects=(out/fs/exec.o out/security/selinux/hooks.o out/security/selinux/selinuxfs.o)
-  local provider_objects=(out/fs/susfs.o)
+  local provider_objects=(out/fs/susfs.o out/security/selinux/ss/services.o)
   local ksu_objects=()
 
   if [[ "$KSU_TYPE" == FinaSU* ]]; then
@@ -308,11 +307,11 @@ verify_susfs_hook_linkage() {
     | awk '$2 == "U" && $1 ~ /^(__)?ksu_|^susfs_|^my_/ {print $1}' | sort -u)" || return 1
   missing="$(comm -23 <(printf '%s\n' "$required") <(printf '%s\n' "$definitions"))"
   if [[ -n "$missing" ]]; then
-    echo "::error::SUSFS kernel hooks require symbols absent from the selected KernelSU driver:"
+    echo "::error::SUSFS hook symbols are missing from the compiled kernel and KernelSU providers:"
     printf '%s\n' "$missing"
     return 1
   fi
-  echo "[+] SUSFS exec and SELinux hooks match the compiled KernelSU/SUSFS symbols."
+  echo "[+] SUSFS exec and SELinux hooks match the compiled kernel and KernelSU symbols."
 }
 
 verify_nomount_source_integration() {

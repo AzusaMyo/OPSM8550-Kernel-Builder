@@ -151,8 +151,8 @@ Available workflow presets:
 | `KowSU` | KowSU | Supported |
 | `FinaSU (experimental)` | FinaSU, built into the kernel | Experimental |
 | `FinaSU + SUSFS (experimental)` | FinaSU with SUSFS Inline hooks | Experimental |
-| `FinaSU + NoMount (experimental)` | FinaSU with built-in NoMount v22 | Experimental |
-| `FinaSU + SUSFS + NoMount (experimental)` | FinaSU with SUSFS Inline and built-in NoMount v22 | Experimental |
+| `FinaSU + NoMount (experimental)` | FinaSU with built-in NoMount | Experimental |
+| `FinaSU + SUSFS + NoMount (experimental)` | FinaSU with SUSFS Inline and built-in NoMount | Experimental |
 | `SukiSU Ultra + KPM (experimental)` | SukiSU Ultra with KPM | Experimental |
 | `SukiSU Ultra + SUSFS + KPM (experimental)` | SukiSU Ultra with SUSFS and KPM | Experimental |
 | `SukiSU Ultra + SUSFS + ZeroMount + KPM (experimental)` | SukiSU Ultra with SUSFS, ZeroMount, and KPM | Experimental |
@@ -162,14 +162,12 @@ Available workflow presets:
 | `BakaSU + SUSFS + ZeroMount (experimental)` | BakaSU with SUSFS and ZeroMount | Experimental |
 | `BakaSU + SUSFS + NoMount (experimental)` | BakaSU with SUSFS and NoMount | Experimental |
 
-FinaSU is pinned to [`LyraVoid/FinaSU v1.4.5`](https://github.com/LyraVoid/FinaSU/releases/tag/v1.4.5),
-commit `a839ce2d742f0f1450a3aad20bdc14bc060da840`. Select `FinaSU (experimental)`
+FinaSU is pinned to [`LyraVoid/FinaSU v1.6.5`](https://github.com/LyraVoid/FinaSU/releases/tag/v1.6.5),
+commit `f96445f966a2c3f4c1257938acf0449757be8a04`. Select `FinaSU (experimental)`
 in the root dropdown and install the matching official
-[`FinaSU_v1.4.5_33168-release.apk`](https://github.com/LyraVoid/FinaSU/releases/download/v1.4.5/FinaSU_v1.4.5_33168-release.apk).
-Its SHA-256 is `edbe2e8fb860135ad0142d672ded2ee4327d70a06746d8d629645184f7eeaeb6`.
-The APK contains ksud: flashing a newer kernel does not update the installed
-manager or daemon. v1.4.5 fixes feature initialization when `/data/adb/modules`
-is absent and includes v1.4.4's module feature ownership and Manager improvements.
+[`FinaSU_v1.6.5_33213-release.apk`](https://github.com/LyraVoid/FinaSU/releases/download/v1.6.5/FinaSU_v1.6.5_33213-release.apk).
+Its SHA-256 is `96acc60da221fba5e8cb906a9e72fc03479eab7603acd005a2f110fedcb19f81`.
+Install the matching Manager APK to update ksud to NoMount API v23.
 The source/APK pair is maintained in `scripts/lib/finasu-release.sh`.
 
 All FinaSU presets enable the driver's KPROBES/EXT4 dependencies,
@@ -180,7 +178,7 @@ builds and packaging also check its bytes in the final Image. A guarded patch
 moves netisolate's 2064-byte empty cleanup policy from the kernel stack to
 read-only storage, preserving the cleanup order.
 
-The verified v1.4.5 manager certificate (`2d89b50a…5d448458`, 716 bytes,
+The verified v1.6.5 manager certificate (`2d89b50a…5d448458`, 716 bytes,
 unchanged since v1.2.1) is supplied in the release signature slot. Both
 post-build verification and packaging check that the final Image contains this
 certificate hash; `build-info.json` records the manager release, APK URL/digest,
@@ -189,21 +187,20 @@ APK. A build using only the upstream default certificate can boot but reject
 FinaSU Manager as not installed.
 
 The base and NoMount-only presets use Tracepoint. SUSFS presets use FinaSU's
-Built-In-only **SUSFS Inline** backend and apply the kernel-side SUSFS v2.3.0
-patch; FinaSU already supplies the driver interface, so the generic KernelSU
-10-patch and legacy SELinux shim are skipped. The per-KMI snapshots match the
-interfaces in FinaSU's documented reference rather than following a newer,
-incompatible SUSFS branch head:
+Built-In-only **SUSFS Inline** backend and apply the kernel-side SUSFS v2.4.0
+patch. FinaSU supplies the driver interface. Each pinned snapshot matches
+FinaSU's Kconfig and command dispatcher. These snapshots precede the
+`sus_path_uid_filter` command, which FinaSU v1.6.5 does not implement.
 
 | SUSFS target | Pinned commit |
 | --- | --- |
-| `gki-android13-5.10` | `cbe3fe7b9fa599d316f68b08b06cde48218eaff5` |
-| `gki-android13-5.15` | `86b5b10068459dedb545dc5db46a0f0254428eda` |
-| `gki-android14-5.15` | `10b4f2156470338a5db2040f3d85992c285aa595` |
-| `gki-android14-6.1` | `b57ed1998b82c4e3a2a81cdbf11172a560979c40` |
+| `gki-android13-5.10` | `1bea9e8fb4a64920f068e5da43f9751dfe601199` |
+| `gki-android13-5.15` | `fe943d15ec6a1891f7a360bf210589bdffe4e318` |
+| `gki-android14-5.15` | `10751e3c83f6e63f886cd2af937fd0a34463824b` |
+| `gki-android14-6.1` | `69b8e734920b8f9ed885ab8d112969719698e242` |
 
-The NoMount presets build FinaSU v1.4.5's vendored NoMount v2.2.0 driver
-(API **22**) into the kernel with `CONFIG_NOMOUNT=y` and `CONFIG_KEYS=y`.
+The NoMount presets build FinaSU v1.6.5's vendored NoMount v2.3.1 driver
+(API **23**) into the kernel with `CONFIG_NOMOUNT=y` and `CONFIG_KEYS=y`.
 The four source files are checked against their recorded SHA-256 values. This
 keeps the kernel's rule format aligned with the paired Manager/ksud; it does
 not follow NoMount `master`. Select **NoMount** in FinaSU Manager's mounting
@@ -316,18 +313,18 @@ compatibility checks keep the KPM symbol resolver linked and initialized and
 preserve SukiSU's WebView zygote policy after the SUSFS patch. Unknown patch
 rejects fail closed and are included in diagnostics.
 
-The KernelSU-Next + SUSFS presets, including the NoMount and ZeroMount variants,
-resolve `pershoot/KernelSU-Next@dev-susfs` to an exact commit. The regular
-KernelSU-Next preset remains on the official
-`KernelSU-Next/KernelSU-Next@dev` branch. The compatibility branch is required
-because the SUSFS KernelSU-side patch does not apply to the current official
-development tree; the pipeline still takes the kernel-side SUSFS files and
-patch from `simonpunk/susfs4ksu` at an exact commit.
+KernelSU-Next + SUSFS and KernelSU-Next + SUSFS + NoMount pin
+`pershoot/KernelSU-Next@dev-susfs` to
+`39b15dead6fa806cb3582f866b081fa1d9e1c9e4` with per-KMI SUSFS v2.4.0 snapshots
+that include `sus_path_uid_filter`. KernelSU-Next + SUSFS + ZeroMount uses
+driver revision `83349468baf83112f7ed327d6f41ed443f443058` and SUSFS v2.3.0
+for compatibility with the pinned ZeroMount patch. The regular KernelSU-Next
+preset follows `KernelSU-Next/KernelSU-Next@dev`.
 
 SUSFS builds require upstream v2.3.0 or newer and explicitly verify the
-`SUS_MAP` and `OPEN_REDIRECT` features in the final config. The NoMount presets
-integrate the exact resolved `master` commit, enable `CONFIG_NOMOUNT=y`, and
-checks both source wiring and final kernel signatures. NoMount hooks VFS
+`SUS_MAP` and `OPEN_REDIRECT` features in the final config. The standalone
+NoMount integration resolves `master`, enables `CONFIG_NOMOUNT=y`, and
+checks both source wiring and kernel object signatures. NoMount hooks VFS
 operations and is marked experimental by its upstream project, so it remains
 an explicit opt-in instead of changing existing build presets.
 SukiSU Ultra SUSFS presets also enable and verify

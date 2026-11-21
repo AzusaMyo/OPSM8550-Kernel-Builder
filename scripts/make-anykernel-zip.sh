@@ -355,7 +355,7 @@ The manager APK contains ksud; updating the kernel alone does not update the ins
 The selected hook backend ($([[ "$KSU_TYPE" == *susfs* ]] && echo 'SUSFS Inline' || echo Tracepoint)) and embedded preinit runner are checked during this build.
 EOF_FINASU
   if [[ "$KSU_TYPE" == *nomount* ]]; then
-    echo 'NoMount API v22 is built into this kernel. Select NoMount in the FinaSU Manager mounting settings to use it; ksud probes the built-in driver without loading another nomount.ko.' >> "$ASSET_DIR/release-notes.md"
+    echo "NoMount API v$FINASU_NOMOUNT_API is built into this kernel. Select NoMount in the FinaSU Manager mounting settings to use it. ksud probes the built-in driver without loading another nomount.ko." >> "$ASSET_DIR/release-notes.md"
   fi
 fi
 

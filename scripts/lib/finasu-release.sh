@@ -2,24 +2,23 @@
 # Reviewed upstream release pair. Update source, APK digest and tests together.
 # Variables are consumed by the scripts sourcing this metadata file.
 # shellcheck disable=SC2034
-FINASU_RELEASE=v1.4.5
-FINASU_COMMIT=a839ce2d742f0f1450a3aad20bdc14bc060da840
-FINASU_MANAGER_APK=FinaSU_v1.4.5_33168-release.apk
+FINASU_RELEASE=v1.6.5
+FINASU_COMMIT=f96445f966a2c3f4c1257938acf0449757be8a04
+FINASU_NOMOUNT_API=23
+FINASU_MANAGER_APK=FinaSU_v1.6.5_33213-release.apk
 FINASU_MANAGER_URL="https://github.com/LyraVoid/FinaSU/releases/download/$FINASU_RELEASE/$FINASU_MANAGER_APK"
-FINASU_MANAGER_APK_SHA256=edbe2e8fb860135ad0142d672ded2ee4327d70a06746d8d629645184f7eeaeb6
+FINASU_MANAGER_APK_SHA256=96acc60da221fba5e8cb906a9e72fc03479eab7603acd005a2f110fedcb19f81
 # Extracted from the verified APK v2 signing block; unchanged since v1.2.1.
 FINASU_MANAGER_CERT_SIZE=0x02cc
 FINASU_MANAGER_CERT_SHA256=2d89b50aaf1db013c2b6738f973f48b62ea21a3a8d7216bfec3521065d448458
 
-# Same interfaces as FinaSU's documented android15-6.6 SUSFS reference
-# (4a4cb1be85a4694372d3efb9420de69982eac29a), with per-KMI kernel patches.
-# Later SUSFS revisions replace the SELinux interface and need a new review.
+# These v2.4.0 snapshots match the pinned FinaSU command dispatcher.
 finasu_susfs_commit() {
   case "$1" in
-    gki-android13-5.10) echo cbe3fe7b9fa599d316f68b08b06cde48218eaff5 ;;
-    gki-android13-5.15) echo 86b5b10068459dedb545dc5db46a0f0254428eda ;;
-    gki-android14-5.15) echo 10b4f2156470338a5db2040f3d85992c285aa595 ;;
-    gki-android14-6.1) echo b57ed1998b82c4e3a2a81cdbf11172a560979c40 ;;
+    gki-android13-5.10) echo 1bea9e8fb4a64920f068e5da43f9751dfe601199 ;;
+    gki-android13-5.15) echo fe943d15ec6a1891f7a360bf210589bdffe4e318 ;;
+    gki-android14-5.15) echo 10751e3c83f6e63f886cd2af937fd0a34463824b ;;
+    gki-android14-6.1) echo 69b8e734920b8f9ed885ab8d112969719698e242 ;;
     *) echo "::error::No FinaSU-compatible SUSFS revision for $1" >&2; return 1 ;;
   esac
 }

@@ -561,6 +561,33 @@ for finasu_choice in 'FinaSU + SUSFS (experimental)' 'FinaSU + NoMount (experime
   done
 done
 
+for mount_variant in NoMount ZeroMount; do
+  expected_driver=39b15dead6fa806cb3582f866b081fa1d9e1c9e4
+  expected_susfs="$(kernelsu_next_susfs_commit gki-android14-5.15)"
+  expected_floor=2.4.0
+  if [[ "$mount_variant" == ZeroMount ]]; then
+    expected_driver=83349468baf83112f7ed327d6f41ed443f443058
+    expected_susfs="$(kernelsu_next_zeromount_susfs_commit gki-android14-5.15)"
+    expected_floor=2.3.0
+  fi
+  : > "$RESOLVER_FIXTURE_DIR/env"
+  PATH="$RESOLVER_FIXTURE_DIR/bin:$PATH" RESOLVER_REAL_GIT="$RESOLVER_REAL_GIT" \
+  INPUT_BUILD_PROFILE='SM8550 | OnePlus 11 / 12R | LineageOS (recommended)' \
+  INPUT_BRANCH_MODE=manual INPUT_KERNEL_BRANCH=lineage-23.0 \
+  INPUT_CLANG_CHOICE='Recommended (auto-select based on branch)' \
+  INPUT_ROOT_SOLUTION="KernelSU-Next + SUSFS + $mount_variant (experimental)" \
+  INPUT_BUILD_MODE='Patch/config validation only' \
+  GITHUB_ENV="$RESOLVER_FIXTURE_DIR/env" GITHUB_OUTPUT="$RESOLVER_FIXTURE_DIR/output" \
+  GITHUB_STEP_SUMMARY="$RESOLVER_FIXTURE_DIR/summary" \
+    bash "$RESOLVER_SCRIPT" > "$RESOLVER_FIXTURE_DIR/log"
+  grep -Fxq "KSU_COMMIT=$expected_driver" "$RESOLVER_FIXTURE_DIR/env" \
+    || fail "KernelSU-Next $mount_variant driver pin"
+  grep -Fxq "SUSFS_COMMIT=$expected_susfs" "$RESOLVER_FIXTURE_DIR/env" \
+    || fail "KernelSU-Next $mount_variant SUSFS pin"
+  grep -Fxq "SUSFS_MIN_VERSION=$expected_floor" "$RESOLVER_FIXTURE_DIR/env" \
+    || fail "KernelSU-Next $mount_variant SUSFS version floor"
+done
+
 for crdroid_profile in \
   "SM7550 | OnePlus Nord CE4 | crDroid (recommended for crDroid)" \
   "SM8550 | OnePlus 11 / 12R | crDroid" \
@@ -769,7 +796,7 @@ done
 (
   hook_fixture="${NOMOUNT_FIXTURE_DIR}/susfs-hook-linkage"
   mkdir -p "$hook_fixture/toolchain" "$hook_fixture/out/fs" \
-    "$hook_fixture/out/security/selinux" "$hook_fixture/out/drivers/kernelsu"
+    "$hook_fixture/out/security/selinux/ss" "$hook_fixture/out/drivers/kernelsu"
   cd "$hook_fixture"
   CLANG_ROOT="$hook_fixture/toolchain"
   KSU_DRIVER_DIR=drivers
@@ -794,9 +821,13 @@ EOF
   "${hook_cc[@]}" -c caller.c -o out/fs/exec.o
   printf '%s\n' 'void local_selinux_hook(void) {}' > caller.c
   "${hook_cc[@]}" -c caller.c -o out/security/selinux/hooks.o
+  printf '%s\n' 'extern void susfs_security_context_to_sid(void);' \
+    'void selinuxfs_hook(void) { susfs_security_context_to_sid(); }' > caller.c
   "${hook_cc[@]}" -c caller.c -o out/security/selinux/selinuxfs.o
+  printf '%s\n' 'void susfs_security_context_to_sid(void) {}' > services.c
+  "${hook_cc[@]}" -c services.c -o out/security/selinux/ss/services.o
   verify_susfs_hook_linkage >/dev/null \
-    || fail "matching legacy SUSFS hook ABI was rejected"
+    || fail "SUSFS hook linkage rejected a definition from SELinux services.o"
   cat > caller.c <<'EOF'
 extern void ksu_preinit_handle_post_execveat(void), ksu_setup_preinit_file(void);
 extern void my_setprocattr(void), my_write_context(void), my_write_access(void);
@@ -1732,6 +1763,19 @@ for nomount_layout in fs common/fs; do
     )
   done
 done
+cat > "$NOMOUNT_SOURCE_FIXTURE/kernel/src/nomount.h" <<'EOF'
+#define NOMOUNT_BASE_VERSION "23"
+#ifdef NOMOUNT_COMMIT_COUNT
+    #define NOMOUNT_VERSION ""NOMOUNT_BASE_VERSION" ("NOMOUNT_COMMIT_COUNT")"
+#else
+    #define NOMOUNT_VERSION NOMOUNT_BASE_VERSION
+#endif
+EOF
+assert_eq "23" "$(detect_nomount_version "$NOMOUNT_SOURCE_FIXTURE/kernel/src")" \
+  "vendored NoMount reports the base protocol version"
+git -C "$NOMOUNT_SOURCE_FIXTURE" remote add origin https://github.com/maxsteeel/nomount.git
+assert_eq "23 (2)" "$(detect_nomount_version "$NOMOUNT_SOURCE_FIXTURE/kernel/src")" \
+  "standalone NoMount reports the compiled version with the commit count"
 printf '%s\n' '#define NOMOUNT_VERSION UNKNOWN_VERSION_EXPRESSION' \
   > "$NOMOUNT_SOURCE_FIXTURE/kernel/src/nomount.h"
 if detect_nomount_version "$NOMOUNT_SOURCE_FIXTURE/kernel/src" >/dev/null 2>&1; then
