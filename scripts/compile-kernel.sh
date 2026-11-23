@@ -378,7 +378,24 @@ COMPILE_STARTED_AT="$(date +%s)"
   done
 ) &
 BUILD_RESOURCE_MONITOR_PID=$!
-if ! make -j"$(nproc)" "${MAKE_ARGS[@]}" Image 2>&1 | tee build.log; then
+if ! (
+  if [[ "${RUNNER_ENVIRONMENT:-}" == github-hosted ]] && grep -Fxq 'CONFIG_LTO_CLANG_FULL=y' out/.config; then
+    # Reclaim memory inside the build scope before Full LTO starves the runner.
+    memory_high_mib="$(awk '$1 == "MemTotal:" {print int($2 * 0.8 / 1024)}' /proc/meminfo)"
+    # Move only this subprocess so the log pipe and runner stay outside the scope.
+    if ! sudo -n systemd-run --scope --quiet --expand-environment=no \
+      --property="MemoryHigh=${memory_high_mib}M" -- bash -euc '
+        scope="$(cut -d: -f3 /proc/self/cgroup)"
+        [[ "$scope" == /*.scope ]]
+        printf "%s\n" "$1" > "/sys/fs/cgroup${scope}/cgroup.procs"
+      ' bash "$BASHPID"; then
+      echo "::error::Could not set up the hosted runner's Full LTO memory scope."
+      exit 1
+    fi
+    echo "[build] Full LTO memory.high set to ${memory_high_mib} MiB."
+  fi
+  exec make -j"$(nproc)" "${MAKE_ARGS[@]}" Image
+) 2>&1 | tee build.log; then
   COMPILE_SECONDS=$(($(date +%s) - COMPILE_STARTED_AT))
   ccache --show-stats || true
   echo "==== BUILD ERROR SUMMARY ===="
