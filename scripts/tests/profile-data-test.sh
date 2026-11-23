@@ -903,7 +903,7 @@ assert_eq \
   "$(sha256sum "$ZEROMOUNT_FIXTURE_DIR/fs/stat-6.1.c" | cut -d' ' -f1)" \
   "ZeroMount 6.1 declaration-free compatibility"
 
-mkdir -p "$SUSFS_VENDOR_FIXTURE_DIR/fs"
+mkdir -p "$SUSFS_VENDOR_FIXTURE_DIR/fs" "$SUSFS_VENDOR_FIXTURE_DIR/mm"
 cat > "$SUSFS_VENDOR_FIXTURE_DIR/fs/namespace.c" <<'EOF'
 #include <linux/mnt_idmapping.h>
 
@@ -927,6 +927,23 @@ cat > "$SUSFS_VENDOR_FIXTURE_DIR/fs/super.c.rej" <<'EOF'
 +#include <linux/susfs_def.h>
 +extern bool susfs_is_current_ksu_domain(void);
 EOF
+cat > "$SUSFS_VENDOR_FIXTURE_DIR/mm/memory.c" <<'EOF'
+#include <linux/vmalloc.h>
+#include <linux/swap_slots.h>
+#include <trace/hooks/mm.h>
+EOF
+cp "$SUSFS_VENDOR_FIXTURE_DIR/mm/memory.c" "$SUSFS_VENDOR_FIXTURE_DIR/memory-original.c"
+cat > "$SUSFS_VENDOR_FIXTURE_DIR/mm/memory.c.rej" <<'EOF'
+--- mm/memory.c
++++ mm/memory.c
+@@ -77,2 +77,5 @@
+ #include <linux/vmalloc.h>
++#ifdef CONFIG_KSU_SUSFS_SUS_MAP
++#include <linux/susfs_def.h>
++#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MAP
+ #include <trace/hooks/mm.h>
+EOF
+cp "$SUSFS_VENDOR_FIXTURE_DIR/mm/memory.c.rej" "$SUSFS_VENDOR_FIXTURE_DIR/memory-include.patch"
 (
   cd "$SUSFS_VENDOR_FIXTURE_DIR"
   resolve_known_susfs_rejects >/dev/null
@@ -939,6 +956,30 @@ grep -Fq '#include <linux/susfs_def.h>' "$SUSFS_VENDOR_FIXTURE_DIR/fs/super.c" \
   || fail "SM8650 SUSFS recovery did not add the superblock header"
 grep -Fq 'extern bool susfs_is_current_ksu_domain(void);' "$SUSFS_VENDOR_FIXTURE_DIR/fs/super.c" \
   || fail "SM8650 SUSFS recovery did not add the superblock domain declaration"
+test ! -e "$SUSFS_VENDOR_FIXTURE_DIR/mm/memory.c.rej" \
+  || fail "SM8550 SUSFS recovery left the memory.c include reject in place"
+diff -u - "$SUSFS_VENDOR_FIXTURE_DIR/mm/memory.c" <<'EOF'
+#include <linux/vmalloc.h>
+#ifdef CONFIG_KSU_SUSFS_SUS_MAP
+#include <linux/susfs_def.h>
+#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MAP
+#include <linux/swap_slots.h>
+#include <trace/hooks/mm.h>
+EOF
+(
+  cd "$SUSFS_VENDOR_FIXTURE_DIR"
+  cp memory-original.c mm/memory.c
+  cp memory-include.patch mm/memory.c.rej
+  cat >> mm/memory.c.rej <<'EOF'
+@@ -7248 +7251 @@
+-		break;
++		continue;
+EOF
+  if resolve_known_susfs_rejects || [[ ! -f mm/memory.c.rej ]]; then
+    fail "SM8550 SUSFS recovery discarded an unrelated memory.c reject"
+  fi
+  cmp memory-original.c mm/memory.c
+)
 
 # Link the generated SELinux compatibility object with all combinations of
 # native symbols. Source inspection alone misses duplicate definitions at LTO.

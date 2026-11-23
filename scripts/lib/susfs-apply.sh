@@ -91,6 +91,32 @@ apply_susfs_super_fix() {
   return 1
 }
 
+apply_susfs_memory_fix() {
+  local reject="$1"
+  local file="mm/memory.c"
+  local block additions
+
+  block=$'#ifdef CONFIG_KSU_SUSFS_SUS_MAP\n#include <linux/susfs_def.h>\n#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MAP'
+
+  # Recover only the known include-only hunk. Other memory.c rejects are fatal.
+  additions="$(awk '
+    /^@@ / { hunks++; next }
+    hunks && /^-/ { removed = 1 }
+    hunks && /^\+/ { print substr($0, 2) }
+    END { if (hunks != 1 || removed) exit 1 }
+  ' "$reject")" || return 1
+  [[ "$additions" == "$block" ]] || return 1
+  grep -Fq 'susfs_def.h' "$file" && return 1
+
+  if insert_block_before_first_match "$file" '#include <linux/swap_slots.h>' "$block" 'susfs_def.h'; then
+    echo "[+] Applied fallback susfs include fix to memory.c."
+    return 0
+  fi
+
+  echo "[-] Could not find a stable insertion point in $file."
+  return 1
+}
+
 resolve_known_susfs_rejects() {
   local reject
   local unknown=0
@@ -109,6 +135,9 @@ resolve_known_susfs_rejects() {
         ;;
       ./fs/super.c.rej)
         grep -q 'susfs_def.h' "$reject" && apply_susfs_super_fix || unknown=1
+        ;;
+      ./mm/memory.c.rej)
+        apply_susfs_memory_fix "$reject" || unknown=1
         ;;
       *)
         unknown=1
