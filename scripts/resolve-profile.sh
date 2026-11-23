@@ -103,9 +103,26 @@ fi
 
 MODULES_BRANCH="${MODULES_BRANCH_OVERRIDE:-$KERNEL_BRANCH}"
 
-# Validate source branches before resolving optional root/patch dependencies.
-KERNEL_COMMIT="$(git_resolve_branch_commit "$KERNEL_REPO" "$KERNEL_BRANCH")"
-MODULES_COMMIT="$(git_resolve_branch_commit "$MODULES_REPO" "$MODULES_BRANCH")"
+OP12_A16_SOURCE_COMMITS="${INPUT_OP12_A16_SOURCE_COMMITS:-}"
+if [[ -n "$OP12_A16_SOURCE_COMMITS" ]]; then
+  if [[ "$PROFILE_ID" != sm8650-oneplus12-crdroid || "$ANDROID_BATCH_BUILD" != 0 ||
+        "$KERNEL_BRANCH" != 16.0 ||
+        ( "$INPUT_BRANCH_MODE" != 'I want to select the branch myself' && "$INPUT_BRANCH_MODE" != manual ) ]]; then
+    echo '::error::OP12 Android 16 source pins require the OnePlus 12 crDroid profile with manual branch 16.0.'
+    exit 1
+  fi
+  source_commit_pair='^([0-9a-f]{40}) +([0-9a-f]{40})$'
+  if [[ ! "$OP12_A16_SOURCE_COMMITS" =~ $source_commit_pair ]]; then
+    echo '::error::Enter the full 40-character kernel SHA and modules SHA, in that order, separated by a space.'
+    exit 1
+  fi
+  KERNEL_COMMIT="${BASH_REMATCH[1]}"
+  MODULES_COMMIT="${BASH_REMATCH[2]}"
+else
+  # Validate source branches before resolving optional root/patch dependencies.
+  KERNEL_COMMIT="$(git_resolve_branch_commit "$KERNEL_REPO" "$KERNEL_BRANCH")"
+  MODULES_COMMIT="$(git_resolve_branch_commit "$MODULES_REPO" "$MODULES_BRANCH")"
+fi
 
 resolve_clang_version "$INPUT_CLANG_CHOICE" "$KERNEL_BRANCH"
 infer_android_versions "$KERNEL_BRANCH"

@@ -118,6 +118,10 @@ on:
         options:
           - Strict GKI module checks (default)
           - Use existing ROM system_dlkm modules (experimental)
+      op12_a16_source_commits:
+        description: "Optional for manual OP12 crDroid 16.0 builds: full kernel SHA, then full modules SHA, separated by a space"
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -173,7 +177,7 @@ jobs:
         kernel_branch: ${{ fromJSON(inputs.branch_mode == 'Build Android 16 + 17 (crDroid batch)' && '["16.0","17.0"]' || '["selected"]') }}
         root_solution: ${{ fromJSON(inputs.root_solution == 'Build all 3 featured SUSFS variants (batch)' && '["SukiSU Ultra + SUSFS + NoMount + KPM (experimental)","BakaSU + SUSFS + NoMount (experimental)","KernelSU-Next + SUSFS + NoMount (experimental)"]' || inputs.root_solution == 'Build all 3 ZeroMount variants (batch)' && '["SukiSU Ultra + SUSFS + ZeroMount + KPM (experimental)","BakaSU + SUSFS + ZeroMount (experimental)","KernelSU-Next + SUSFS + ZeroMount (experimental)"]' || format('["{0}"]', inputs.root_solution)) }}
     concurrency:
-      group: kernel-ci-${{ github.ref_name }}-${{ inputs.build_profile }}-${{ matrix.root_solution }}-${{ matrix.kernel_branch }}-${{ inputs.branch_mode }}-${{ inputs.kernel_branch }}-${{ inputs.clang_choice }}-${{ inputs.rom_gki_module_compat }}-${{ inputs.build_mode }}
+      group: kernel-ci-${{ github.ref_name }}-${{ inputs.build_profile }}-${{ matrix.root_solution }}-${{ matrix.kernel_branch }}-${{ inputs.branch_mode }}-${{ inputs.kernel_branch }}-${{ inputs.clang_choice }}-${{ inputs.rom_gki_module_compat }}-${{ inputs.op12_a16_source_commits }}-${{ inputs.build_mode }}
       cancel-in-progress: true
 
     env:
@@ -196,6 +200,7 @@ jobs:
           INPUT_ROOT_SOLUTION: ${{ matrix.root_solution }}
           INPUT_BUILD_MODE: ${{ inputs.build_mode }}
           INPUT_ROM_GKI_MODULE_COMPAT: ${{ inputs.rom_gki_module_compat }}
+          INPUT_OP12_A16_SOURCE_COMMITS: ${{ inputs.op12_a16_source_commits }}
         run: bash scripts/resolve-profile.sh
 
       - name: Set build metadata

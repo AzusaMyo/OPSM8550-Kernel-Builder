@@ -59,6 +59,14 @@ you trust. This can let the existing ROM modules load, but it reduces GKI
 protected-symbol enforcement and does not guarantee
 compatibility if module CRCs or firmware differ. The default remains strict.
 The chosen mode is recorded in `build-info.json` and in the ZIP filename.
+For older OP12 crDroid Android 16 builds, choose the OnePlus 12 crDroid
+profile and select branch `16.0` manually. Set `op12_a16_source_commits` to
+the ROM's full kernel commit and full modules commit, separated by a space
+(kernel first). Each checkout uses its pinned commit, and both commits are
+recorded in `build-info.json`. An empty input follows the current branch
+heads. To test the known `rfkill.ko` failure, select the experimental GKI
+mode explicitly and compare against strict checks with the same source pins
+and root preset.
 The OnePlus 12 crDroid flashable ZIP also replaces AnyKernel's 32-bit ARM
 BusyBox and MagiskBoot with pinned arm64 versions from Magisk 30.7. The device
 reports `arm64-v8a` and cannot execute the old 32-bit MagiskBoot; the package
