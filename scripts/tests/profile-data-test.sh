@@ -677,6 +677,38 @@ for crdroid_profile in \
   done
 done
 
+# Verify historical source pins survive even when branch heads have advanced.
+pinned_kernel=3333333333333333333333333333333333333333
+pinned_modules=4444444444444444444444444444444444444444
+for pin_case in valid missing-modules wrong-branch; do
+  source_pins="$pinned_kernel $pinned_modules"
+  pin_branch=16.0
+  case "$pin_case" in
+    missing-modules) source_pins="$pinned_kernel" ;;
+    wrong-branch) pin_branch=17.0 ;;
+  esac
+  : > "$RESOLVER_FIXTURE_DIR/env"
+  if PATH="$RESOLVER_FIXTURE_DIR/bin:$PATH" RESOLVER_REAL_GIT="$RESOLVER_REAL_GIT" \
+    INPUT_BUILD_PROFILE='SM8650 | OnePlus 12 | crDroid' \
+    INPUT_BRANCH_MODE='I want to select the branch myself' INPUT_KERNEL_BRANCH="$pin_branch" \
+    INPUT_CLANG_CHOICE='Recommended (auto-select based on branch)' \
+    INPUT_ROOT_SOLUTION='No root changes' INPUT_BUILD_MODE='Patch/config validation only' \
+    INPUT_ROM_GKI_MODULE_COMPAT='Use existing ROM system_dlkm modules (experimental)' \
+    INPUT_OP12_A16_SOURCE_COMMITS="$source_pins" \
+    GITHUB_ENV="$RESOLVER_FIXTURE_DIR/env" GITHUB_OUTPUT="$RESOLVER_FIXTURE_DIR/output" \
+    GITHUB_STEP_SUMMARY="$RESOLVER_FIXTURE_DIR/summary" \
+      bash "$RESOLVER_SCRIPT" > "$RESOLVER_FIXTURE_DIR/log" 2>&1; then
+    [[ "$pin_case" == valid ]] || fail "resolver accepted invalid source pins: $pin_case"
+    for expected_field in "KERNEL_COMMIT=$pinned_kernel" "MODULES_COMMIT=$pinned_modules" \
+      KERNEL_BRANCH=16.0 MODULES_BRANCH=16.0 ROM_GKI_MODULE_COMPAT=1; do
+      grep -Fxq "$expected_field" "$RESOLVER_FIXTURE_DIR/env" || fail "source pins missing $expected_field"
+    done
+  else
+    [[ "$pin_case" != valid ]] || fail 'resolver rejected valid OP12 Android 16 source pins'
+    [[ ! -s "$RESOLVER_FIXTURE_DIR/env" ]] || fail 'invalid source pins exported a partial profile'
+  fi
+done
+
 # A batch job must not silently resolve a non-crDroid source to another Android
 # version, or accept a forgotten matrix expansion.
 for invalid_batch_case in unsupported-profile unexpanded-mode invalid-flag; do
