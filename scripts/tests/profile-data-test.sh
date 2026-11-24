@@ -35,7 +35,7 @@ assert_eq() {
 
 profiles=()
 mapfile -t profiles < <(list_build_profiles)
-assert_eq "12" "${#profiles[@]}" "profile count"
+assert_eq "13" "${#profiles[@]}" "profile count"
 
 WORKFLOW_FILE="${SCRIPT_DIR}/../../.github/workflows/build.yml"
 UPSTREAM_HEALTH_WORKFLOW="${SCRIPT_DIR}/../../.github/workflows/upstream-health.yml"
@@ -138,10 +138,10 @@ awk '
 ' "$UPSTREAM_HEALTH_WORKFLOW" \
   || fail "upstream health must exercise KPM on the crDroid OnePlus 12 source"
 
-expected_socs=(sm7550 sm7550 sm8450 sm8450 sm8550 sm8550 sm8550 sm8550 sm8550 sm8650 sm8650 sm8650)
-expected_upstream_socs=(sm8550 sm8550 sm8450 sm8450 sm8550 sm8550 sm8550 sm8550 sm8550 sm8650 sm8650 sm8650)
-expected_codenames=(benz benz negroni ovaltine salami salami "salami aston astonc" "salami aston astonc" "aston astonc" waffle waffle waffle)
-expected_devices=("benz OP5D3FL1 CPH2613" "benz OP5D3FL1 CPH2613" "negroni OP516EL1 OP516FL1" "ovaltine OP5551L1 OP5552L1" "salami OP591BL1 OP594DL1" "salami OP591BL1 OP594DL1" "salami OP591BL1 OP594DL1 aston OP5D35L1 astonc OP5CF9L1" "salami OP591BL1 OP594DL1 aston OP5D35L1 astonc OP5CF9L1" "aston OP5D35L1 astonc OP5CF9L1" "waffle OP5929L1 OP595DL1" "waffle OP5929L1 OP595DL1" "waffle OP5929L1 OP595DL1")
+expected_socs=(sm7550 sm7550 sm8450 sm8450 sm8550 sm8550 sm8550 sm8550 sm8550 sm8550 sm8650 sm8650 sm8650)
+expected_upstream_socs=(sm8550 sm8550 sm8450 sm8450 sm8550 sm8550 sm8550 sm8550 sm8550 sm8550 sm8650 sm8650 sm8650)
+expected_codenames=(benz benz negroni ovaltine salami salami "salami aston astonc" "salami aston astonc" "aston astonc" aston waffle waffle waffle)
+expected_devices=("benz OP5D3FL1 CPH2613" "benz OP5D3FL1 CPH2613" "negroni OP516EL1 OP516FL1" "ovaltine OP5551L1 OP5552L1" "salami OP591BL1 OP594DL1" "salami OP591BL1 OP594DL1" "salami OP591BL1 OP594DL1 aston OP5D35L1 astonc OP5CF9L1" "salami OP591BL1 OP594DL1 aston OP5D35L1 astonc OP5CF9L1" "aston OP5D35L1 astonc OP5CF9L1" "aston OP5D35L1" "waffle OP5929L1 OP595DL1" "waffle OP5929L1 OP595DL1" "waffle OP5929L1 OP595DL1")
 
 for i in "${!profiles[@]}"; do
   resolve_build_profile "${profiles[$i]}"
@@ -185,6 +185,33 @@ assert_eq "https://github.com/osm1019/kernel_oneplus_sm8550.git" "$KERNEL_REPO_O
 assert_eq "https://github.com/osm1019/android_kernel_oneplus_sm8550-modules.git" "$MODULES_REPO_OVERRIDE" "LunarisOS modules repository"
 assert_eq "los" "$MODULES_BRANCH_OVERRIDE" "LunarisOS modules branch"
 assert_eq "lunarisos" "$SOURCE_SLUG" "LunarisOS source slug"
+
+resolve_build_profile "SM8550 | OnePlus 12R | Lunaris-AOSP"
+assert_eq "gaurav-paul9" "$KERNEL_SOURCE" "Lunaris-AOSP source owner"
+assert_eq "lunaris-16.2" "$REQUIRED_KERNEL_BRANCH" "Lunaris-AOSP required branch"
+assert_eq "" "$MODULES_BRANCH_OVERRIDE" "Lunaris-AOSP modules follow the kernel branch"
+assert_eq "" "$KERNEL_MAKE_FLAGS" "Lunaris-AOSP uses standard SM8550 fragments"
+resolve_clang_version "Recommended (auto-select based on branch)" "$REQUIRED_KERNEL_BRANCH"
+assert_eq "clang-r563880c" "$CLANG_VERSION" "Lunaris-AOSP compiler"
+infer_android_versions "$REQUIRED_KERNEL_BRANCH"
+assert_eq "16" "$SUPPORTED_ANDROID_VERSIONS" "Lunaris-AOSP Android version"
+grep -Fxq '          - lunaris-16.2' <<< "$kernel_branch_input" \
+  || fail "workflow must offer the Lunaris-AOSP branch"
+grep -Fq 'profile: SM8550 | OnePlus 12R | Lunaris-AOSP' "$UPSTREAM_HEALTH_WORKFLOW" \
+  || fail "upstream health must exercise the Lunaris-AOSP OnePlus 12R source"
+if lunaris_wrong_branch_output="$(
+  INPUT_BUILD_PROFILE='SM8550 | OnePlus 12R | Lunaris-AOSP' \
+    INPUT_BRANCH_MODE=manual INPUT_KERNEL_BRANCH=seventeen \
+    INPUT_ROOT_SOLUTION='No root changes' \
+    INPUT_CLANG_CHOICE='Recommended (auto-select based on branch)' \
+    INPUT_BUILD_MODE='Patch/config validation only' \
+    GITHUB_ENV=/dev/null GITHUB_OUTPUT=/dev/null GITHUB_STEP_SUMMARY=/dev/null \
+    bash "$RESOLVER_SCRIPT" 2>&1
+)"; then
+  fail "Lunaris-AOSP must reject branches for other ROMs"
+fi
+grep -Fq "requires 'lunaris-16.2' for both source trees" <<< "$lunaris_wrong_branch_output" \
+  || fail "Lunaris-AOSP rejected an unsupported branch for the wrong reason"
 
 resolve_root_solution "BakaSU + SUSFS"
 assert_eq "BakaSU-with-susfs" "$KSU_TYPE" "root mapping"

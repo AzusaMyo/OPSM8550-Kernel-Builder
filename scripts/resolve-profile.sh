@@ -83,8 +83,11 @@ KERNEL_REPO="${KERNEL_REPO_OVERRIDE:-$DEFAULT_KERNEL_REPO}"
 MODULES_REPO="${MODULES_REPO_OVERRIDE:-$DEFAULT_MODULES_REPO}"
 
 if [[ "$INPUT_BRANCH_MODE" == "Use the recommended branch automatically" ]]; then
-  KERNEL_BRANCH="$(git_ls_remote_retry --symref "$KERNEL_REPO" HEAD \
-    | awk '/^ref:/ {sub("refs/heads/", "", $2); print $2; exit}')"
+  KERNEL_BRANCH="$REQUIRED_KERNEL_BRANCH"
+  if [[ -z "$KERNEL_BRANCH" ]]; then
+    KERNEL_BRANCH="$(git_ls_remote_retry --symref "$KERNEL_REPO" HEAD \
+      | awk '/^ref:/ {sub("refs/heads/", "", $2); print $2; exit}')"
+  fi
   if [[ -z "$KERNEL_BRANCH" ]]; then
     echo "::error::Could not detect the default branch from $KERNEL_REPO"
     exit 1
@@ -99,6 +102,11 @@ else
     echo "::error::Invalid Git branch name: $KERNEL_BRANCH"
     exit 1
   fi
+fi
+
+if [[ -n "$REQUIRED_KERNEL_BRANCH" && "$KERNEL_BRANCH" != "$REQUIRED_KERNEL_BRANCH" ]]; then
+  echo "::error::Profile '$INPUT_BUILD_PROFILE' requires '$REQUIRED_KERNEL_BRANCH' for both source trees."
+  exit 1
 fi
 
 MODULES_BRANCH="${MODULES_BRANCH_OVERRIDE:-$KERNEL_BRANCH}"

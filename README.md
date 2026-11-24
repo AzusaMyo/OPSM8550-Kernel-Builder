@@ -19,6 +19,7 @@ and source independently.
 | `sm8450` | OnePlus 10T / Ace Pro | `ovaltine`, `OP5551L1`, `OP5552L1` | LineageOS community |
 | `sm8550` | OnePlus 11 | `salami`, `OP591BL1`, `OP594DL1` | OnePlus official |
 | `sm8550` | OnePlus 11 | `salami`, `OP591BL1`, `OP594DL1` | LunarisOS |
+| `sm8550` | OnePlus 12R | `aston`, `OP5D35L1` | Lunaris-AOSP |
 | `sm8550` | OnePlus 11 / 12R / Ace 3 | OnePlus 11 IDs plus `aston`, `OP5D35L1`, `astonc`, `OP5CF9L1` | LineageOS |
 | `sm8550` | OnePlus 11 / 12R / Ace 3 | OnePlus 11 IDs plus `aston`, `OP5D35L1`, `astonc`, `OP5CF9L1` | crDroid |
 | `sm8550` | OnePlus 12R / Ace 3 | `aston`, `OP5D35L1`, `astonc`, `OP5CF9L1` | OnePlus 12R development |
@@ -68,6 +69,12 @@ The LunarisOS OnePlus 11 profile follows the kernel source published in the
 LunarisOS OTA metadata. Its maintainer kernel uses `lineage-23.2`, while its
 matching external modules use the `los` branch; the resolver pins both branches
 independently and records both exact commits in the build provenance.
+
+For Lunaris-AOSP 3.13 on OnePlus 12R (`aston`), select
+`SM8550 | OnePlus 12R | Lunaris-AOSP` in **Build OnePlus Kernel**.
+The profile uses the maintainer's `lunaris-16.2` kernel and modules
+branches with AOSP `clang-r563880c`. Select **No root changes** to build the
+baseline kernel with the workflow's standard AnyKernel3 package.
 
 Every package accepts both its custom-ROM codename and the device-specific
 stock board IDs published by the corresponding device tree. Generic SoC board
@@ -446,21 +453,22 @@ Pushes and pull requests run:
 
 - Bash syntax checks
 - ShellCheck at warning severity
-- offline tests for all twelve profile mappings, root mappings (including the
+- offline tests for all thirteen profile mappings, root mappings (including the
   three ZeroMount variants), Clang selection, KPM configuration, SUSFS
   selection/version floor, NoMount/ZeroMount selection and wiring,
   Android version inference, and workflow option synchronization
 - actionlint for all workflow files
 
 `Check upstream health` runs every Monday and can also be started manually. It
-resolves exact commits for all twelve profiles, then runs a thirty-job
+resolves exact commits for all thirteen profiles, then runs a
 smoke-test matrix: KernelSU-Next + SUSFS + NoMount, SukiSU Ultra + SUSFS +
 NoMount + KPM
 (including the crDroid OnePlus 12 / Android 6.1 vendor include drift),
 and BakaSU + SUSFS + NoMount are validated on representative SM7550 (including
 both CE4 source families), SM8450, SM8550 (including crDroid), and SM8650
 sources, with an additional
-baseline validation for the LunarisOS OnePlus 11 and crDroid OnePlus 12 sources.
+baseline validation for the LunarisOS OnePlus 11, Lunaris-AOSP OnePlus 12R,
+and crDroid OnePlus 12 sources.
 The SukiSU Ultra ZeroMount preset is validated across the representative
 5.10, 5.15, and 6.1 source families; the KernelSU-Next and BakaSU ZeroMount
 presets additionally run against the representative SM8550 LineageOS source.

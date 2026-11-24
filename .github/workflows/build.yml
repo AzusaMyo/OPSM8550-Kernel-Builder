@@ -20,11 +20,12 @@ on:
           - SM8550 | OnePlus 11 / 12R | LineageOS (recommended)
           - SM8550 | OnePlus 11 / 12R | crDroid
           - SM8550 | OnePlus 12R | development
+          - SM8550 | OnePlus 12R | Lunaris-AOSP
           - SM8650 | OnePlus 12 | OnePlus official
           - SM8650 | OnePlus 12 | LineageOS (recommended)
           - SM8650 | OnePlus 12 | crDroid
       branch_mode:
-        description: Use the default branch, select one manually, or build both Android 16 and 17 (crDroid only)
+        description: Use the recommended branch, select one manually, or build both Android 16 and 17 (crDroid only)
         required: true
         type: choice
         default: Use the recommended branch automatically
@@ -54,6 +55,7 @@ on:
           - seventeen
           - sixteen-qpr2
           - sixteen-qpr1
+          - lunaris-16.2
           - fifteen
           - oneplus/sm8450_b_16.0_oneplus_10_pro
           - oneplus/sm8550_b_16.0.0_oneplus_11

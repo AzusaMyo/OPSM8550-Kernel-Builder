@@ -74,6 +74,8 @@ jobs:
           - integration: No root changes
             profile: SM8550 | OnePlus 11 | LunarisOS
           - integration: No root changes
+            profile: SM8550 | OnePlus 12R | Lunaris-AOSP
+          - integration: No root changes
             profile: SM8650 | OnePlus 12 | crDroid
           - integration: SukiSU Ultra + SUSFS + NoMount + KPM (experimental)
             profile: SM8650 | OnePlus 12 | crDroid
