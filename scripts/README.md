@@ -78,7 +78,7 @@ driver/manager config, and exclusion of the existing SUSFS patch pipeline.
 Its upstream-health entries compile the driver on 5.10, 5.15, and 6.1 profiles.
 `tests/finasu-manager-test.sh` runs the real pinned FinaSU Kbuild and certificate
 matcher against its public release certificate (unchanged from v1.2.1 to
-v1.6.5). It reproduces rejection
+v1.7.1). It reproduces rejection
 with the upstream default key, verifies our release-slot arguments authorize
 FinaSU while other preset managers stay untrusted, and rejects an Image missing
 the release certificate hash. Each FinaSU build also runs this matcher test

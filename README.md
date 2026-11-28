@@ -177,11 +177,11 @@ Available workflow presets:
 | `BakaSU + SUSFS + ZeroMount (experimental)` | BakaSU with SUSFS and ZeroMount | Experimental |
 | `BakaSU + SUSFS + NoMount (experimental)` | BakaSU with SUSFS and NoMount | Experimental |
 
-FinaSU is pinned to [`LyraVoid/FinaSU v1.6.5`](https://github.com/LyraVoid/FinaSU/releases/tag/v1.6.5),
-commit `f96445f966a2c3f4c1257938acf0449757be8a04`. Select `FinaSU (experimental)`
+FinaSU is pinned to [`LyraVoid/FinaSU v1.7.1`](https://github.com/LyraVoid/FinaSU/releases/tag/v1.7.1),
+commit `1627e52fdaf1bb5eeeb6ae763eb15c18a111511e`. Select `FinaSU (experimental)`
 in the root dropdown and install the matching official
-[`FinaSU_v1.6.5_33213-release.apk`](https://github.com/LyraVoid/FinaSU/releases/download/v1.6.5/FinaSU_v1.6.5_33213-release.apk).
-Its SHA-256 is `96acc60da221fba5e8cb906a9e72fc03479eab7603acd005a2f110fedcb19f81`.
+[`FinaSU_v1.7.1_33227-release.apk`](https://github.com/LyraVoid/FinaSU/releases/download/v1.7.1/FinaSU_v1.7.1_33227-release.apk).
+Its SHA-256 is `3dc63911e61cf804b148603233c6819c62ffae5e8947fdcc4015c47c1f3395a1`.
 Install the matching Manager APK to update ksud to NoMount API v23.
 The source/APK pair is maintained in `scripts/lib/finasu-release.sh`.
 
@@ -193,7 +193,7 @@ builds and packaging also check its bytes in the final Image. A guarded patch
 moves netisolate's 2064-byte empty cleanup policy from the kernel stack to
 read-only storage, preserving the cleanup order.
 
-The verified v1.6.5 manager certificate (`2d89b50a…5d448458`, 716 bytes,
+The verified v1.7.1 manager certificate (`2d89b50a…5d448458`, 716 bytes,
 unchanged since v1.2.1) is supplied in the release signature slot. Both
 post-build verification and packaging check that the final Image contains this
 certificate hash; `build-info.json` records the manager release, APK URL/digest,
@@ -205,7 +205,7 @@ The base and NoMount-only presets use Tracepoint. SUSFS presets use FinaSU's
 Built-In-only **SUSFS Inline** backend and apply the kernel-side SUSFS v2.4.0
 patch. FinaSU supplies the driver interface. Each pinned snapshot matches
 FinaSU's Kconfig and command dispatcher. These snapshots precede the
-`sus_path_uid_filter` command, which FinaSU v1.6.5 does not implement.
+`sus_path_uid_filter` command, which FinaSU v1.7.1 does not implement.
 
 | SUSFS target | Pinned commit |
 | --- | --- |
@@ -214,7 +214,7 @@ FinaSU's Kconfig and command dispatcher. These snapshots precede the
 | `gki-android14-5.15` | `10751e3c83f6e63f886cd2af937fd0a34463824b` |
 | `gki-android14-6.1` | `69b8e734920b8f9ed885ab8d112969719698e242` |
 
-The NoMount presets build FinaSU v1.6.5's vendored NoMount v2.3.1 driver
+The NoMount presets build FinaSU v1.7.1's vendored NoMount v2.3.1 driver
 (API **23**) into the kernel with `CONFIG_NOMOUNT=y` and `CONFIG_KEYS=y`.
 The four source files are checked against their recorded SHA-256 values. This
 keeps the kernel's rule format aligned with the paired Manager/ksud; it does
